@@ -132,6 +132,7 @@ export default function Home() {
   const [selectedTimeZone, setSelectedTimeZone] = useState("America/New_York")
   const [compactness, setCompactness] = useState(50)
   const [gridOpacity, setGridOpacity] = useState(20) // New state for grid opacity
+  const [backgroundOpacity, setBackgroundOpacity] = useState(60) // New state for calendar grid background opacity
   const [backgroundImage, setBackgroundImage] = useState("mountain")
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState("")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -1568,7 +1569,7 @@ export default function Home() {
     const timeLinePosition = getCurrentTimeLinePosition()
 
     return (
-      <div className="calendar-container h-full flex flex-col">
+      <div className="calendar-container h-full flex flex-col" style={{background: `rgba(40, 40, 50, ${backgroundOpacity/100})`, backdropFilter: 'blur(16px)'}}>
         <div className="p-4 border-b border-white/20 bg-black/20 backdrop-blur-sm flex-shrink-0">
           <h3 className="text-xl font-semibold text-white">{getDisplayTitle()}</h3>
 
@@ -1740,7 +1741,7 @@ export default function Home() {
     const weekEvents = getEventsForDisplay()
 
     return (
-      <div className="calendar-container h-full flex flex-col">
+      <div className="calendar-container h-full flex flex-col" style={{background: `rgba(40, 40, 50, ${backgroundOpacity/100})`, backdropFilter: 'blur(16px)'}}>
         {/* Week Header */}
         <div className="flex border-b border-white/20 bg-black/20 backdrop-blur-sm flex-shrink-0">
           <div className="w-20 p-2 text-center text-gray-500 text-xs border-r border-white/20"></div>
@@ -2002,7 +2003,7 @@ export default function Home() {
     const monthEvents = getEventsForDisplay()
 
     return (
-      <div className="calendar-container">
+      <div className="calendar-container" style={{background: `rgba(40, 40, 50, ${backgroundOpacity/100})`, backdropFilter: 'blur(16px)'}}>
         {/* Month Header */}
         <div className="grid grid-cols-7 border-b border-white/20 bg-black/20 backdrop-blur-sm">
           {weekDays.map((day, i) => (
@@ -3857,6 +3858,23 @@ export default function Home() {
                     <div className="flex justify-between text-xs text-white/70 mt-1">
                       <span>Hidden</span>
                       <span>Visible</span>
+                    </div>
+                  </div>
+
+                  {/* Calendar Background Opacity Slider */}
+                  <div>
+                    <label className="block text-white text-sm font-medium mb-2">Calendar Background Opacity: {backgroundOpacity}%</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={backgroundOpacity}
+                      onChange={(e) => setBackgroundOpacity(Number.parseInt(e.target.value))}
+                      className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
+                    />
+                    <div className="flex justify-between text-xs text-white/70 mt-1">
+                      <span>Transparent</span>
+                      <span>Opaque</span>
                     </div>
                   </div>
 
