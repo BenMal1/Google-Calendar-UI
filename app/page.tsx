@@ -22,6 +22,7 @@ import {
   CheckCircle,
   Repeat,
   X,
+  ChevronDown,
 } from "lucide-react"
 
 // Google OAuth configuration - make it optional
@@ -125,14 +126,14 @@ export default function Home() {
   const [isLoaded, setIsLoaded] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [formattingSectionCollapsed, setFormattingSectionCollapsed] = useState(true)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [isEditMode, setIsEditMode] = useState(isGoogleAuthEnabled)
   const [editingEventId, setEditingEventId] = useState(null)
   const [currentView, setCurrentView] = useState("week")
   const [selectedTimeZone, setSelectedTimeZone] = useState("America/New_York")
   const [compactness, setCompactness] = useState(50)
-  const [gridOpacity, setGridOpacity] = useState(20) // New state for grid opacity
-  const [backgroundOpacity, setBackgroundOpacity] = useState(60) // New state for calendar grid background opacity
+  const [backgroundOpacity, setBackgroundOpacity] = useState(60)
   const [backgroundImage, setBackgroundImage] = useState("mountain")
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState("")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -1569,7 +1570,18 @@ export default function Home() {
     const timeLinePosition = getCurrentTimeLinePosition()
 
     return (
-      <div className="calendar-container h-full flex flex-col" style={{background: `rgba(40, 40, 50, ${backgroundOpacity/100})`, backdropFilter: 'blur(16px)'}}>
+      <div 
+        className="calendar-container h-full flex flex-col" 
+        style={{
+          background: backgroundOpacity === 100 
+            ? 'rgba(40, 40, 50, 0.5)' 
+            : `rgba(40, 40, 50, ${backgroundOpacity/100})`,
+          backdropFilter: `blur(${backgroundOpacity/5}px)`,
+          WebkitBackdropFilter: `blur(${backgroundOpacity/5}px)`,
+          borderRadius: backgroundOpacity === 100 ? '1rem' : '0',
+          transition: 'all 0.3s ease-in-out'
+        }}
+      >
         <div className="p-4 border-b border-white/20 bg-black/20 backdrop-blur-sm flex-shrink-0">
           <h3 className="text-xl font-semibold text-white">{getDisplayTitle()}</h3>
 
@@ -1649,7 +1661,7 @@ export default function Home() {
                     className="border-b pr-2 text-right text-xs flex items-center justify-end bg-black/20"
                     style={{
                       height: `${slotHeight}px`,
-                      borderBottomColor: `rgba(255, 255, 255, ${(gridOpacity / 100) * 0.2})`,
+                      borderBottomColor: "rgba(255, 255, 255, 0.2)",
                     }}
                   >
                     {formatTimeDisplay(time)}
@@ -1669,7 +1681,7 @@ export default function Home() {
                   }`}
                   style={{
                     height: `${slotHeight}px`,
-                    borderBottomColor: `rgba(255, 255, 255, ${(gridOpacity / 100) * 0.2})`,
+                    borderBottomColor: "rgba(255, 255, 255, 0.2)",
                   }}
                   onMouseDown={() => handleTimeSlotMouseDown(hour)}
                   onMouseEnter={() => handleTimeSlotMouseEnter(hour)}
@@ -1741,11 +1753,22 @@ export default function Home() {
     const weekEvents = getEventsForDisplay()
 
     return (
-      <div className="calendar-container h-full flex flex-col" style={{background: `rgba(40, 40, 50, ${backgroundOpacity/100})`, backdropFilter: 'blur(16px)'}}>
+      <div 
+        className="calendar-container h-full flex flex-col" 
+        style={{
+          background: backgroundOpacity === 100 
+            ? 'rgba(40, 40, 50, 0.95)' 
+            : `rgba(40, 40, 50, ${backgroundOpacity/100})`,
+          backdropFilter: `blur(${backgroundOpacity/5}px)`,
+          WebkitBackdropFilter: `blur(${backgroundOpacity/5}px)`,
+          borderRadius: backgroundOpacity === 100 ? '1rem' : '0',
+          transition: 'all 0.3s ease-in-out'
+        }}
+      >
         {/* Week Header */}
         <div className="flex border-b border-white/20 bg-black/20 backdrop-blur-sm flex-shrink-0">
           <div className="w-20 p-2 text-center text-gray-500 text-xs border-r border-white/20"></div>
-          <div className="flex-1 grid grid-cols-7">
+          <div className="flex-1 grid grid-cols-7 divide-x divide-white/20">
             {weekDays.map((day, i) => {
               const dayDate = weekDates[i]
               const dayAllDayEvents = weekEvents.filter(
@@ -1757,7 +1780,7 @@ export default function Home() {
               )
 
               return (
-                <div key={i} className="p-2 text-center border-l border-white/20">
+                <div key={i} className="p-2 text-center">
                   <div className="text-xs text-white/70 font-medium">{day}</div>
                   <div
                     className={`text-lg font-medium mt-1 ${
@@ -1842,7 +1865,7 @@ export default function Home() {
                     className="border-b pr-2 text-right text-xs flex items-center justify-end bg-black/20"
                     style={{
                       height: `${slotHeight}px`,
-                      borderBottomColor: `rgba(255, 255, 255, ${(gridOpacity / 100) * 0.2})`,
+                      borderBottomColor: "rgba(255, 255, 255, 0.2)",
                     }}
                   >
                     {formatTimeDisplay(time)}
@@ -1853,7 +1876,7 @@ export default function Home() {
 
             {/* Days Grid with Proper Event Containment and Multi-day Support */}
             <div
-              className="flex-1 grid grid-cols-7 relative min-w-0"
+              className="flex-1 grid grid-cols-7 divide-x divide-white/20 relative min-w-0"
               style={{ height: `${timeSlots.length * slotHeight}px` }}
             >
               {Array.from({ length: 7 }).map((_, dayIndex) => {
@@ -1862,7 +1885,7 @@ export default function Home() {
                 const timeLinePosition = getCurrentTimeLinePosition()
 
                 return (
-                  <div key={dayIndex} className="border-l border-white/20 relative overflow-hidden">
+                  <div key={dayIndex} className="relative overflow-hidden">
                     {/* Hour Grid Lines with Drag Functionality */}
                     {timeSlots.map((hour, timeIndex) => (
                       <div
@@ -1874,7 +1897,7 @@ export default function Home() {
                         }`}
                         style={{
                           height: `${slotHeight}px`,
-                          borderBottomColor: `rgba(255, 255, 255, ${(gridOpacity / 100) * 0.2})`,
+                          borderBottomColor: "rgba(255, 255, 255, 0.2)",
                         }}
                         onMouseDown={() => handleTimeSlotMouseDown(hour, dayIndex)}
                         onMouseEnter={() => handleTimeSlotMouseEnter(hour, dayIndex)}
@@ -2003,7 +2026,18 @@ export default function Home() {
     const monthEvents = getEventsForDisplay()
 
     return (
-      <div className="calendar-container" style={{background: `rgba(40, 40, 50, ${backgroundOpacity/100})`, backdropFilter: 'blur(16px)'}}>
+      <div 
+        className="calendar-container" 
+        style={{
+          background: backgroundOpacity === 100 
+            ? 'rgba(40, 40, 50, 0.95)' 
+            : `rgba(40, 40, 50, ${backgroundOpacity/100})`,
+          backdropFilter: `blur(${backgroundOpacity/5}px)`,
+          WebkitBackdropFilter: `blur(${backgroundOpacity/5}px)`,
+          borderRadius: backgroundOpacity === 100 ? '1rem' : '0',
+          transition: 'all 0.3s ease-in-out'
+        }}
+      >
         {/* Month Header */}
         <div className="grid grid-cols-7 border-b border-white/20 bg-black/20 backdrop-blur-sm">
           {weekDays.map((day, i) => (
@@ -2025,8 +2059,8 @@ export default function Home() {
                 key={i}
                 className={`border-r border-b last:border-r-0 p-2 min-h-[120px] ${!day ? "invisible" : ""}`}
                 style={{
-                  borderBottomColor: `rgba(255, 255, 255, ${(gridOpacity / 100) * 0.2})`,
-                  borderRightColor: `rgba(255, 255, 255, ${(gridOpacity / 100) * 0.2})`,
+                  borderBottomColor: `rgba(255, 255, 255, 0.2)`,
+                  borderRightColor: `rgba(255, 255, 255, 0.2)`,
                 }}
               >
                 {day && (
@@ -3825,83 +3859,115 @@ export default function Home() {
                     </select>
                   </div>
 
-                  {/* Compactness Slider */}
-                  <div>
-                    <label className="block text-white text-sm font-medium mb-2">
-                      Calendar Compactness: {compactness}%
-                    </label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={compactness}
-                      onChange={(e) => setCompactness(Number.parseInt(e.target.value))}
-                      className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
-                    />
-                    <div className="flex justify-between text-xs text-white/70 mt-1">
-                      <span>Compact</span>
-                      <span>Spacious</span>
-                    </div>
-                  </div>
-
-                  {/* Grid Opacity Slider */}
-                  <div>
-                    <label className="block text-white text-sm font-medium mb-2">Grid Opacity: {gridOpacity}%</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={gridOpacity}
-                      onChange={(e) => setGridOpacity(Number.parseInt(e.target.value))}
-                      className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
-                    />
-                    <div className="flex justify-between text-xs text-white/70 mt-1">
-                      <span>Hidden</span>
-                      <span>Visible</span>
-                    </div>
-                  </div>
-
-                  {/* Calendar Background Opacity Slider */}
-                  <div>
-                    <label className="block text-white text-sm font-medium mb-2">Calendar Background Opacity: {backgroundOpacity}%</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={backgroundOpacity}
-                      onChange={(e) => setBackgroundOpacity(Number.parseInt(e.target.value))}
-                      className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
-                    />
-                    <div className="flex justify-between text-xs text-white/70 mt-1">
-                      <span>Transparent</span>
-                      <span>Opaque</span>
-                    </div>
-                  </div>
-
-                  {/* All-Day Event Display */}
-                  <div>
-                    <label className="block text-white text-sm font-medium mb-2">All-Day Event Display</label>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setAllDayEventDisplay("full")}
-                        className={`px-4 py-2 rounded-md text-sm transition-colors ${
-                          allDayEventDisplay === "full"
-                            ? "bg-blue-500 text-white"
-                            : "bg-white/10 text-white/70 hover:bg-white/20"
+                  {/* Formatting Section */}
+                  <div className="space-y-4">
+                    <button
+                      onClick={() => setFormattingSectionCollapsed(!formattingSectionCollapsed)}
+                      className="flex items-center justify-between w-full text-white text-sm font-medium hover:text-white/90 transition-colors"
+                    >
+                      <span>Formatting</span>
+                      <ChevronDown
+                        className={`w-5 h-5 transition-transform duration-200 ${
+                          formattingSectionCollapsed ? "" : "rotate-180"
                         }`}
-                      >
-                        Full Details
-                      </button>
-                      <button
-                        onClick={() => setAllDayEventDisplay("compact")}
-                        className={`px-4 py-2 rounded-md text-sm transition-colors ${
-                          allDayEventDisplay === "compact"
-                            ? "bg-blue-500 text-white"
-                            : "bg-white/10 text-white/70 hover:bg-white/20"
-                        }`}
-                      >
-                        Compact Dots
-                      </button>
+                      />
+                    </button>
+                    <div
+                      className={`space-y-4 pl-4 border-l-2 border-white/10 overflow-hidden transition-all duration-200 ${
+                        formattingSectionCollapsed ? "max-h-0 opacity-0" : "max-h-[500px] opacity-100"
+                      }`}
+                    >
+                      {/* Calendar Compactness */}
+                      <div>
+                        <label className="block text-white text-sm font-medium mb-2">
+                          Calendar Compactness: {compactness}%
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={compactness}
+                          onChange={(e) => setCompactness(Number.parseInt(e.target.value))}
+                          className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
+                        />
+                        <div className="flex justify-between text-xs text-white/70 mt-1">
+                          <span>Compact</span>
+                          <span>Spacious</span>
+                        </div>
+                      </div>
+
+                      {/* Calendar Background Opacity */}
+                      <div>
+                        <label className="block text-white text-sm font-medium mb-2">
+                          Calendar Background Opacity: {backgroundOpacity}%
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={backgroundOpacity}
+                          onChange={(e) => setBackgroundOpacity(Number.parseInt(e.target.value))}
+                          className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
+                        />
+                        <div className="flex justify-between text-xs text-white/70 mt-1">
+                          <span>Transparent</span>
+                          <span>Opaque</span>
+                        </div>
+                      </div>
+
+                      {/* All-Day Event Display */}
+                      <div>
+                        <label className="block text-white text-sm font-medium mb-2">All-Day Event Display</label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setAllDayEventDisplay("full")}
+                            className={`px-4 py-2 rounded-md text-sm transition-colors ${
+                              allDayEventDisplay === "full"
+                                ? "bg-blue-500 text-white"
+                                : "bg-white/10 text-white/70 hover:bg-white/20"
+                            }`}
+                          >
+                            Full Details
+                          </button>
+                          <button
+                            onClick={() => setAllDayEventDisplay("compact")}
+                            className={`px-4 py-2 rounded-md text-sm transition-colors ${
+                              allDayEventDisplay === "compact"
+                                ? "bg-blue-500 text-white"
+                                : "bg-white/10 text-white/70 hover:bg-white/20"
+                            }`}
+                          >
+                            Compact Dots
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Show Current Timeline Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-white text-sm font-medium">Show Current Time Line</div>
+                          <div className="text-white/70 text-xs">Display a line showing the current time</div>
+                        </div>
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showTimeline}
+                            onChange={(e) => setShowTimeline(e.target.checked)}
+                            className="sr-only"
+                          />
+                          <div
+                            className={`relative w-11 h-6 rounded-full transition-colors ${
+                              showTimeline ? "bg-blue-500" : "bg-white/20"
+                            }`}
+                          >
+                            <div
+                              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                                showTimeline ? "translate-x-5" : ""
+                              }`}
+                            ></div>
+                          </div>
+                        </label>
+                      </div>
                     </div>
                   </div>
 
@@ -3966,33 +4032,6 @@ export default function Home() {
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Timeline Toggle */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-white text-sm font-medium">Show Current Time Line</div>
-                      <div className="text-white/70 text-xs">Display a line showing the current time</div>
-                    </div>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showTimeline}
-                        onChange={(e) => setShowTimeline(e.target.checked)}
-                        className="sr-only"
-                      />
-                      <div
-                        className={`relative w-11 h-6 rounded-full transition-colors ${
-                          showTimeline ? "bg-blue-500" : "bg-white/20"
-                        }`}
-                      >
-                        <div
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                            showTimeline ? "translate-x-5" : ""
-                          }`}
-                        ></div>
-                      </div>
-                    </label>
                   </div>
                 </div>
               </div>
