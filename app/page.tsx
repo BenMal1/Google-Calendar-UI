@@ -133,7 +133,8 @@ export default function Home() {
   const [currentView, setCurrentView] = useState("week")
   const [selectedTimeZone, setSelectedTimeZone] = useState("America/New_York")
   const [compactness, setCompactness] = useState(50)
-  const [backgroundOpacity, setBackgroundOpacity] = useState(60)
+  const [backgroundOpacity, setBackgroundOpacity] = useState(40)
+  const [backgroundBlur, setBackgroundBlur] = useState(0)
   const [backgroundImage, setBackgroundImage] = useState("mountain")
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState("")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -1573,12 +1574,10 @@ export default function Home() {
       <div 
         className="calendar-container h-full flex flex-col" 
         style={{
-          background: backgroundOpacity === 100 
-            ? 'rgba(40, 40, 50, 0.5)' 
-            : `rgba(40, 40, 50, ${backgroundOpacity/100})`,
-          backdropFilter: `blur(${backgroundOpacity/5}px)`,
-          WebkitBackdropFilter: `blur(${backgroundOpacity/5}px)`,
+          background: `rgba(0, 0, 0, ${backgroundOpacity/100})`,
           borderRadius: backgroundOpacity === 100 ? '1rem' : '0',
+          backdropFilter: `blur(${backgroundBlur}px)`,
+          WebkitBackdropFilter: `blur(${backgroundBlur}px)`,
           transition: 'all 0.3s ease-in-out'
         }}
       >
@@ -1756,265 +1755,273 @@ export default function Home() {
       <div 
         className="calendar-container h-full flex flex-col" 
         style={{
-          background: backgroundOpacity === 100 
-            ? 'rgba(40, 40, 50, 0.95)' 
-            : `rgba(40, 40, 50, ${backgroundOpacity/100})`,
-          backdropFilter: `blur(${backgroundOpacity/5}px)`,
-          WebkitBackdropFilter: `blur(${backgroundOpacity/5}px)`,
+          background: `rgba(0, 0, 0, ${backgroundOpacity/100})`,
           borderRadius: backgroundOpacity === 100 ? '1rem' : '0',
+          backdropFilter: `blur(${backgroundBlur}px)`,
+          WebkitBackdropFilter: `blur(${backgroundBlur}px)`,
           transition: 'all 0.3s ease-in-out'
         }}
       >
-        {/* Week Header */}
-        <div className="flex border-b border-white/20 bg-black/20 backdrop-blur-sm flex-shrink-0">
-          <div className="w-20 p-2 text-center text-gray-500 text-xs border-r border-white/20"></div>
-          <div className="flex-1 grid grid-cols-7 divide-x divide-white/20">
-            {weekDays.map((day, i) => {
-              const dayDate = weekDates[i]
-              const dayAllDayEvents = weekEvents.filter(
-                (event) =>
-                  event.isAllDay &&
-                  event.day === dayDate.date &&
-                  event.month === dayDate.month &&
-                  event.year === dayDate.year,
-              )
+        {/* Shared container for header and grid to maintain alignment */}
+        <div className="flex flex-col flex-1 min-h-0">
+          {/* Week Header - Fixed position */}
+          <div className="flex border-b border-white/20 bg-black/20 backdrop-blur-sm flex-shrink-0">
+            <div className="w-20 p-2 text-center text-gray-500 text-xs border-r border-white/20 flex-shrink-0"></div>
+            <div className="flex-1 grid grid-cols-7 divide-x divide-white/20 relative min-w-0">
+              {weekDays.map((day, i) => {
+                const dayDate = weekDates[i]
+                const dayAllDayEvents = weekEvents.filter(
+                  (event) =>
+                    event.isAllDay &&
+                    event.day === dayDate.date &&
+                    event.month === dayDate.month &&
+                    event.year === dayDate.year,
+                )
 
-              return (
-                <div key={i} className="p-2 text-center">
-                  <div className="text-xs text-white/70 font-medium">{day}</div>
-                  <div
-                    className={`text-lg font-medium mt-1 ${
-                      isCurrentWeekDay(weekDates[i])
-                        ? "bg-orange-500 rounded-full w-8 h-8 flex items-center justify-center mx-auto ring-2 ring-orange-300 font-bold text-white"
-                        : "text-white/90"
-                    }`}
-                  >
-                    {weekDates[i].date}
-                  </div>
+                return (
+                  <div key={i} className="p-2 text-center">
+                    <div className="text-xs text-white/70 font-medium">{day}</div>
+                    <div
+                      className={`text-lg font-medium mt-1 ${
+                        isCurrentWeekDay(weekDates[i])
+                          ? "bg-orange-500 rounded-full w-8 h-8 flex items-center justify-center mx-auto ring-2 ring-orange-300 font-bold text-white"
+                          : "text-white/90"
+                      }`}
+                    >
+                      {weekDates[i].date}
+                    </div>
 
-                  {/* All-Day Events for this day */}
-                  {dayAllDayEvents.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {allDayEventDisplay === "compact" ? (
-                        <div className="flex flex-wrap gap-1 justify-center">
-                          {dayAllDayEvents.slice(0, 2).map((event, eventIndex) => (
+                    {/* All-Day Events for this day */}
+                    {dayAllDayEvents.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {allDayEventDisplay === "compact" ? (
+                          <div className="flex flex-wrap gap-1 justify-center">
+                            {dayAllDayEvents.slice(0, 2).map((event, eventIndex) => (
+                              <div
+                                key={eventIndex}
+                                className={`w-2 h-2 rounded-full ${event.color} cursor-pointer relative`}
+                                style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleEventClick(event)
+                                }}
+                                title={`${event.title} (All Day)`}
+                              >
+                                {event.isRecurring && <Repeat className="absolute -top-1 -right-1 h-2 w-2 text-white" />}
+                              </div>
+                            ))}
+                            {dayAllDayEvents.length > 2 && (
+                              <div className="text-xs text-white/60">+{dayAllDayEvents.length - 2}</div>
+                            )}
+                          </div>
+                        ) : (
+                          dayAllDayEvents.slice(0, 2).map((event, eventIndex) => (
                             <div
                               key={eventIndex}
-                              className={`w-2 h-2 rounded-full ${event.color} cursor-pointer relative`}
+                              className={`${event.color} text-white text-xs p-1 rounded cursor-pointer hover:opacity-80 truncate ${
+                                event.source === "google" ? "border-l-2 border-white" : ""
+                              }`}
                               style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleEventClick(event)
                               }}
-                              title={`${event.title} (All Day)`}
                             >
-                              {event.isRecurring && <Repeat className="absolute -top-1 -right-1 h-2 w-2 text-white" />}
+                              <div className="flex items-center">
+                                {event.title}
+                                {event.isRecurring && <Repeat className="inline h-2 w-2 ml-1" />}
+                              </div>
                             </div>
-                          ))}
-                          {dayAllDayEvents.length > 2 && (
-                            <div className="text-xs text-white/60">+{dayAllDayEvents.length - 2}</div>
-                          )}
-                        </div>
-                      ) : (
-                        dayAllDayEvents.slice(0, 2).map((event, eventIndex) => (
-                          <div
-                            key={eventIndex}
-                            className={`${event.color} text-white text-xs p-1 rounded cursor-pointer hover:opacity-80 truncate ${
-                              event.source === "google" ? "border-l-2 border-white" : ""
-                            }`}
-                            style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEventClick(event)
-                            }}
-                          >
-                            <div className="flex items-center">
-                              {event.title}
-                              {event.isRecurring && <Repeat className="inline h-2 w-2 ml-1" />}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Time Grid with Synced Scrolling */}
-        <div className="flex flex-1 min-h-0">
-          <div
-            className="flex w-full overflow-y-auto custom-scrollbar"
-            onScroll={(e) => {
-              // Sync scroll between time column and content
-              const scrollTop = e.target.scrollTop
-              const timeColumn = e.target.querySelector(".time-column")
-              if (timeColumn) {
-                timeColumn.scrollTop = scrollTop
-              }
-            }}
-          >
-            {/* Fixed Time Column */}
-            <div className="w-20 text-white/90 border-r border-white/20 bg-black/20 backdrop-blur-sm z-10 flex-shrink-0 sticky left-0">
-              <div className="time-column" style={{ height: `${timeSlots.length * slotHeight}px` }}>
-                {timeSlots.map((time, i) => (
-                  <div
-                    key={i}
-                    className="border-b pr-2 text-right text-xs flex items-center justify-end bg-black/20"
-                    style={{
-                      height: `${slotHeight}px`,
-                      borderBottomColor: "rgba(255, 255, 255, 0.2)",
-                    }}
-                  >
-                    {formatTimeDisplay(time)}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Days Grid with Proper Event Containment and Multi-day Support */}
-            <div
-              className="flex-1 grid grid-cols-7 divide-x divide-white/20 relative min-w-0"
-              style={{ height: `${timeSlots.length * slotHeight}px` }}
-            >
-              {Array.from({ length: 7 }).map((_, dayIndex) => {
-                const dayDate = weekDates[dayIndex]
-                const showTimeLine = shouldShowCurrentTimeLine(dayDate)
-                const timeLinePosition = getCurrentTimeLinePosition()
-
-                return (
-                  <div key={dayIndex} className="relative overflow-hidden">
-                    {/* Hour Grid Lines with Drag Functionality */}
-                    {timeSlots.map((hour, timeIndex) => (
-                      <div
-                        key={timeIndex}
-                        className={`border-b cursor-pointer hover:bg-white/5 transition-colors ${
-                          isTimeSlotDragged(hour) && (dragStart?.day === dayIndex || currentView === "day")
-                            ? "bg-blue-500/30 border-blue-400"
-                            : ""
-                        }`}
-                        style={{
-                          height: `${slotHeight}px`,
-                          borderBottomColor: "rgba(255, 255, 255, 0.2)",
-                        }}
-                        onMouseDown={() => handleTimeSlotMouseDown(hour, dayIndex)}
-                        onMouseEnter={() => handleTimeSlotMouseEnter(hour, dayIndex)}
-                        onMouseUp={handleTimeSlotMouseUp}
-                      ></div>
-                    ))}
-
-                    {/* Current Time Line - Only for current day */}
-                    {showTimeLine && (
-                      <div
-                        className="absolute left-0 right-0 z-30 pointer-events-none"
-                        style={{ top: `${timeLinePosition}px` }}
-                      >
-                        <div className="flex items-center">
-                          <div className="w-2 h-2 bg-orange-500 rounded-full shadow-lg"></div>
-                          <div className="flex-1 h-0.5 bg-orange-500 shadow-lg"></div>
-                        </div>
+                          ))
+                        )}
                       </div>
                     )}
-
-                    {/* Timed Events with Strict Column Containment */}
-                    {events
-                      .filter(
-                        (event) =>
-                          !event.isAllDay &&
-                          event.day === weekDates[dayIndex].date &&
-                          event.month === weekDates[dayIndex].month &&
-                          event.year === weekDates[dayIndex].year,
-                      )
-                      .map((event, i) => {
-                        const dayEvents = events.filter(
-                          (e) =>
-                            !e.isAllDay &&
-                            e.day === weekDates[dayIndex].date &&
-                            e.month === weekDates[dayIndex].month &&
-                            e.year === weekDates[dayIndex].year,
-                        )
-                        const eventStyle = calculateEventStyleFn(event.startTime, event.endTime, dayEvents, event)
-                        return (
-                          <div
-                            key={`${event.id}-${i}`}
-                            className={`absolute ${event.color} rounded-md p-1 text-white text-xs shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden ${
-                              event.source === "google" ? "border-l-2 border-white" : ""
-                            }`}
-                            style={{
-                              top: eventStyle.top,
-                              height: eventStyle.height,
-                              left: `calc(4px + ${eventStyle.left})`,
-                              width: `calc(${eventStyle.width} - 8px)`,
-                              maxWidth: `calc(100% - 8px)`,
-                              zIndex: eventStyle.zIndex,
-                              minWidth: "40px",
-                              ...(event.exactColor ? { backgroundColor: event.exactColor } : {}),
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEventClick(event)
-                            }}
-                          >
-                            <div className="font-medium truncate text-[10px] flex items-center">
-                              {event.title}
-                              {event.source === "google" && (
-                                <span className="ml-1 text-[8px] bg-white/20 px-1 rounded">G</span>
-                              )}
-                              {event.isRecurring && <Repeat className="inline h-2 w-2 ml-1" />}
-                            </div>
-                            <div className="opacity-80 text-[8px] mt-1 truncate">{`${event.startTime} - ${event.endTime}`}</div>
-                          </div>
-                        )
-                      })}
                   </div>
                 )
               })}
+            </div>
+            {/* Scrollbar-aligned placeholder cell */}
+            <div className="w-[10px] flex-shrink-0" aria-hidden="true"></div>
+          </div>
 
-              {/* Multi-day Events Overlay */}
-              {weekEvents
-                .filter((event) => event.isMultiDay && !event.isAllDay)
-                .map((event, i) => {
-                  const spanDays = getEventSpanDays(event, weekDates)
-                  if (spanDays.length === 0) return null
-
-                  const startDayIndex = spanDays[0]
-                  const endDayIndex = spanDays[spanDays.length - 1]
-                  const eventStyle = calculateEventStyleFn(event.startTime, event.endTime, [], event)
-
-                  return (
+          {/* Time Grid with Synced Scrolling */}
+          <div className="flex flex-1 min-h-0">
+            <div
+              className="flex w-full overflow-y-auto custom-scrollbar"
+              style={{ 
+                scrollbarGutter: 'stable',
+                scrollbarWidth: 'thin',
+                msOverflowStyle: 'none'
+              }}
+              onScroll={(e) => {
+                // Sync scroll between time column and content
+                const scrollTop = e.target.scrollTop
+                const timeColumn = e.target.querySelector(".time-column")
+                if (timeColumn) {
+                  timeColumn.scrollTop = scrollTop
+                }
+              }}
+            >
+              {/* Fixed Time Column */}
+              <div className="w-20 text-white/90 border-r border-white/20 bg-black/20 backdrop-blur-sm z-10 flex-shrink-0 sticky left-0">
+                <div className="time-column" style={{ height: `${timeSlots.length * slotHeight}px` }}>
+                  {timeSlots.map((time, i) => (
                     <div
-                      key={`multi-${event.id}-${i}`}
-                      className={`absolute ${event.color} rounded-md p-1 text-white text-xs shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden border-2 border-white/30 ${
-                        event.source === "google" ? "border-l-4 border-white" : ""
-                      }`}
+                      key={i}
+                      className="border-b pr-2 text-right text-xs flex items-center justify-end bg-black/20"
                       style={{
-                        top: eventStyle.top,
-                        height: eventStyle.height,
-                        left: `calc(${(startDayIndex / 7) * 100}% + 4px)`,
-                        width: `calc(${((endDayIndex - startDayIndex + 1) / 7) * 100}% - 8px)`,
-                        zIndex: 25,
-                        minWidth: "60px",
-                        ...(event.exactColor ? { backgroundColor: event.exactColor } : {}),
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleEventClick(event)
+                        height: `${slotHeight}px`,
+                        borderBottomColor: "rgba(255, 255, 255, 0.2)",
                       }}
                     >
-                      <div className="font-medium truncate text-[10px] flex items-center">
-                        {event.title}
-                        {event.source === "google" && (
-                          <span className="ml-1 text-[8px] bg-white/20 px-1 rounded">G</span>
-                        )}
-                        {event.isRecurring && <Repeat className="inline h-2 w-2 ml-1" />}
-                        <span className="ml-1 text-[8px] bg-white/20 px-1 rounded">Multi-day</span>
-                      </div>
-                      <div className="opacity-80 text-[8px] mt-1 truncate">{`${event.startTime} - ${event.endTime}`}</div>
+                      {formatTimeDisplay(time)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Days Grid with Proper Event Containment and Multi-day Support */}
+              <div
+                className="flex-1 grid grid-cols-7 divide-x divide-white/20 relative min-w-0"
+                style={{ height: `${timeSlots.length * slotHeight}px` }}
+              >
+                {Array.from({ length: 7 }).map((_, dayIndex) => {
+                  const dayDate = weekDates[dayIndex]
+                  const showTimeLine = shouldShowCurrentTimeLine(dayDate)
+                  const timeLinePosition = getCurrentTimeLinePosition()
+
+                  return (
+                    <div key={dayIndex} className="relative overflow-hidden">
+                      {/* Hour Grid Lines with Drag Functionality */}
+                      {timeSlots.map((hour, timeIndex) => (
+                        <div
+                          key={timeIndex}
+                          className={`border-b cursor-pointer hover:bg-white/5 transition-colors ${
+                            isTimeSlotDragged(hour) && (dragStart?.day === dayIndex || currentView === "day")
+                              ? "bg-blue-500/30 border-blue-400"
+                              : ""
+                          }`}
+                          style={{
+                            height: `${slotHeight}px`,
+                            borderBottomColor: "rgba(255, 255, 255, 0.2)",
+                          }}
+                          onMouseDown={() => handleTimeSlotMouseDown(hour, dayIndex)}
+                          onMouseEnter={() => handleTimeSlotMouseEnter(hour, dayIndex)}
+                          onMouseUp={handleTimeSlotMouseUp}
+                        ></div>
+                      ))}
+
+                      {/* Current Time Line - Only for current day */}
+                      {showTimeLine && (
+                        <div
+                          className="absolute left-0 right-0 z-30 pointer-events-none"
+                          style={{ top: `${timeLinePosition}px` }}
+                        >
+                          <div className="flex items-center">
+                            <div className="w-2 h-2 bg-orange-500 rounded-full shadow-lg"></div>
+                            <div className="flex-1 h-0.5 bg-orange-500 shadow-lg"></div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Timed Events with Strict Column Containment */}
+                      {events
+                        .filter(
+                          (event) =>
+                            !event.isAllDay &&
+                            event.day === weekDates[dayIndex].date &&
+                            event.month === weekDates[dayIndex].month &&
+                            event.year === weekDates[dayIndex].year,
+                        )
+                        .map((event, i) => {
+                          const dayEvents = events.filter(
+                            (e) =>
+                              !e.isAllDay &&
+                              e.day === weekDates[dayIndex].date &&
+                              e.month === weekDates[dayIndex].month &&
+                              e.year === weekDates[dayIndex].year,
+                          )
+                          const eventStyle = calculateEventStyleFn(event.startTime, event.endTime, dayEvents, event)
+                          return (
+                            <div
+                              key={`${event.id}-${i}`}
+                              className={`absolute ${event.color} rounded-md p-1 text-white text-xs shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden ${
+                                event.source === "google" ? "border-l-2 border-white" : ""
+                              }`}
+                              style={{
+                                top: eventStyle.top,
+                                height: eventStyle.height,
+                                left: `calc(4px + ${eventStyle.left})`,
+                                width: `calc(${eventStyle.width} - 8px)`,
+                                maxWidth: `calc(100% - 8px)`,
+                                zIndex: eventStyle.zIndex,
+                                minWidth: "40px",
+                                ...(event.exactColor ? { backgroundColor: event.exactColor } : {}),
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEventClick(event)
+                              }}
+                            >
+                              <div className="font-medium truncate text-[10px] flex items-center">
+                                {event.title}
+                                {event.source === "google" && (
+                                  <span className="ml-1 text-[8px] bg-white/20 px-1 rounded">G</span>
+                                )}
+                                {event.isRecurring && <Repeat className="inline h-2 w-2 ml-1" />}
+                              </div>
+                              <div className="opacity-80 text-[8px] mt-1 truncate">{`${event.startTime} - ${event.endTime}`}</div>
+                            </div>
+                          )
+                        })}
                     </div>
                   )
                 })}
+
+                {/* Multi-day Events Overlay */}
+                {weekEvents
+                  .filter((event) => event.isMultiDay && !event.isAllDay)
+                  .map((event, i) => {
+                    const spanDays = getEventSpanDays(event, weekDates)
+                    if (spanDays.length === 0) return null
+
+                    const startDayIndex = spanDays[0]
+                    const endDayIndex = spanDays[spanDays.length - 1]
+                    const eventStyle = calculateEventStyleFn(event.startTime, event.endTime, [], event)
+
+                    return (
+                      <div
+                        key={`multi-${event.id}-${i}`}
+                        className={`absolute ${event.color} rounded-md p-1 text-white text-xs shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden border-2 border-white/30 ${
+                          event.source === "google" ? "border-l-4 border-white" : ""
+                        }`}
+                        style={{
+                          top: eventStyle.top,
+                          height: eventStyle.height,
+                          left: `calc(${(startDayIndex / 7) * 100}% + 4px)`,
+                          width: `calc(${((endDayIndex - startDayIndex + 1) / 7) * 100}% - 8px)`,
+                          zIndex: 25,
+                          minWidth: "60px",
+                          ...(event.exactColor ? { backgroundColor: event.exactColor } : {}),
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEventClick(event)
+                        }}
+                      >
+                        <div className="font-medium truncate text-[10px] flex items-center">
+                          {event.title}
+                          {event.source === "google" && (
+                            <span className="ml-1 text-[8px] bg-white/20 px-1 rounded">G</span>
+                          )}
+                          {event.isRecurring && <Repeat className="inline h-2 w-2 ml-1" />}
+                          <span className="ml-1 text-[8px] bg-white/20 px-1 rounded">Multi-day</span>
+                        </div>
+                        <div className="opacity-80 text-[8px] mt-1 truncate">{`${event.startTime} - ${event.endTime}`}</div>
+                      </div>
+                    )
+                  })}
+              </div>
             </div>
           </div>
         </div>
@@ -2029,12 +2036,10 @@ export default function Home() {
       <div 
         className="calendar-container" 
         style={{
-          background: backgroundOpacity === 100 
-            ? 'rgba(40, 40, 50, 0.95)' 
-            : `rgba(40, 40, 50, ${backgroundOpacity/100})`,
-          backdropFilter: `blur(${backgroundOpacity/5}px)`,
-          WebkitBackdropFilter: `blur(${backgroundOpacity/5}px)`,
+          background: `rgba(0, 0, 0, ${backgroundOpacity/100})`,
           borderRadius: backgroundOpacity === 100 ? '1rem' : '0',
+          backdropFilter: `blur(${backgroundBlur}px)`,
+          WebkitBackdropFilter: `blur(${backgroundBlur}px)`,
           transition: 'all 0.3s ease-in-out'
         }}
       >
@@ -2427,7 +2432,7 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
-      {/* Background Image with persistent blur effect */}
+      {/* Background Image with dynamic blur effect */}
       <div className="fixed inset-0 z-0" style={{ pointerEvents: "none" }}>
         <Image
           src={getCurrentBackgroundUrl() || "/placeholder.svg"}
@@ -2436,7 +2441,14 @@ export default function Home() {
           className="object-cover"
           priority
         />
-        <div className="absolute inset-0 backdrop-blur-[1px] bg-black/5"></div>
+        <div 
+          className="absolute inset-0 bg-black/5" 
+          style={{
+            backdropFilter: `blur(${backgroundBlur}px)`,
+            WebkitBackdropFilter: `blur(${backgroundBlur}px)`,
+            transition: 'all 0.3s ease-in-out'
+          }}
+        />
       </div>
 
       {/* Auth Error Notification */}
@@ -3912,6 +3924,25 @@ export default function Home() {
                         <div className="flex justify-between text-xs text-white/70 mt-1">
                           <span>Transparent</span>
                           <span>Opaque</span>
+                        </div>
+                      </div>
+
+                      {/* Calendar Background Blur */}
+                      <div>
+                        <label className="block text-white text-sm font-medium mb-2">
+                          Background Blur: {backgroundBlur}px
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="20"
+                          value={backgroundBlur}
+                          onChange={(e) => setBackgroundBlur(Number.parseInt(e.target.value))}
+                          className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
+                        />
+                        <div className="flex justify-between text-xs text-white/70 mt-1">
+                          <span>Clear</span>
+                          <span>Blurred</span>
                         </div>
                       </div>
 
