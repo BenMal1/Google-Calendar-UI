@@ -225,21 +225,14 @@ export default function Home() {
     return `${roundedHour.toString().padStart(2, "0")}:00`
   }
 
-  // Helper function to add one hour to a time string
   const addOneHour = (timeStr: string): string => {
     const [hours, minutes] = timeStr.split(":").map(Number)
     const newHours = (hours + 1) % 24
     return `${newHours.toString().padStart(2, "0")}:00`
   }
 
-  // Helper function to generate time options
-  const generateTimeOptions = (): string[] => {
-    const options: string[] = []
-    for (let hour = 0; hour < 24; hour++) {
-      options.push(`${hour.toString().padStart(2, "0")}:00`)
-    }
-    return options
-  }
+  // Time options generation is handled by the more complete implementation below
+  // that includes 15-minute increments and proper AM/PM formatting
 
   // Update the getCurrentDateTime function
   const getCurrentDateTime = () => {
