@@ -216,17 +216,53 @@ export default function Home() {
 
   const [events, setEvents] = useState<CalendarEvent[]>([])
 
+  // Helper function to round time to nearest hour
+  const roundToNearestHour = (): string => {
+    const now = new Date()
+    const hours = now.getHours()
+    const minutes = now.getMinutes()
+    const roundedHour = minutes >= 30 ? (hours + 1) % 24 : hours
+    return `${roundedHour.toString().padStart(2, "0")}:00`
+  }
+
+  // Helper function to add one hour to a time string
+  const addOneHour = (timeStr: string): string => {
+    const [hours, minutes] = timeStr.split(":").map(Number)
+    const newHours = (hours + 1) % 24
+    return `${newHours.toString().padStart(2, "0")}:00`
+  }
+
+  // Helper function to generate time options
+  const generateTimeOptions = (): string[] => {
+    const options: string[] = []
+    for (let hour = 0; hour < 24; hour++) {
+      options.push(`${hour.toString().padStart(2, "0")}:00`)
+    }
+    return options
+  }
+
+  // Update the getCurrentDateTime function
   const getCurrentDateTime = () => {
     const now = new Date()
-    const currentHour = now.getHours()
-    const nextHour = (currentHour + 1) % 24
+    const currentTime = roundToNearestHour()
+    const nextHour = addOneHour(currentTime)
 
     return {
       day: now.getDate(),
       month: now.getMonth(),
       year: now.getFullYear(),
-      startTime: `${currentHour.toString().padStart(2, "0")}:00`,
-      endTime: `${nextHour.toString().padStart(2, "0")}:00`,
+      startTime: currentTime,
+      endTime: nextHour,
+    }
+  }
+
+  // Update the handleTimeChange function
+  const handleTimeChange = (time: string, isStartTime: boolean): void => {
+    if (isStartTime) {
+      const newEndTime = addOneHour(time)
+      setNewEvent({ ...newEvent, startTime: time, endTime: newEndTime })
+    } else {
+      setNewEvent({ ...newEvent, endTime: time })
     }
   }
 
@@ -3211,7 +3247,7 @@ export default function Home() {
                         </button>
 
                         {showDatePicker && (
-                          <div className="absolute top-full left-0 mt-1 bg-white/10 backdrop-blur-lg border border-white/20 rounded-lg shadow-xl p-4 z-50">
+                          <div className="absolute top-full left-0 mt-1 bg-gray-900/95 border border-white/20 rounded-lg shadow-xl p-4 z-50">
                             <div className="flex items-center justify-between mb-4">
                               <h3 className="text-white font-medium">
                                 {monthNames[newEvent.month]} {newEvent.year}
@@ -3219,9 +3255,13 @@ export default function Home() {
                               <div className="flex gap-1">
                                 <button
                                   onClick={() => {
-                                    const newMonth = newEvent.month === 0 ? 11 : newEvent.month - 1
-                                    const newYear = newEvent.month === 0 ? newEvent.year - 1 : newEvent.year
-                                    setNewEvent({ ...newEvent, month: newMonth, year: newYear })
+                                    const newMonth = newEvent.month - 1
+                                    const newYear = newEvent.year
+                                    setNewEvent({
+                                      ...newEvent,
+                                      month: newMonth < 0 ? 11 : newMonth,
+                                      year: newMonth < 0 ? newYear - 1 : newYear,
+                                    })
                                   }}
                                   className="p-1 rounded-full hover:bg-white/20"
                                 >
@@ -3229,9 +3269,13 @@ export default function Home() {
                                 </button>
                                 <button
                                   onClick={() => {
-                                    const newMonth = newEvent.month === 11 ? 0 : newEvent.month + 1
-                                    const newYear = newEvent.month === 11 ? newEvent.year + 1 : newEvent.year
-                                    setNewEvent({ ...newEvent, month: newMonth, year: newYear })
+                                    const newMonth = newEvent.month + 1
+                                    const newYear = newEvent.year
+                                    setNewEvent({
+                                      ...newEvent,
+                                      month: newMonth > 11 ? 0 : newMonth,
+                                      year: newMonth > 11 ? newYear + 1 : newYear,
+                                    })
                                   }}
                                   className="p-1 rounded-full hover:bg-white/20"
                                 >
@@ -3279,7 +3323,7 @@ export default function Home() {
                           </button>
 
                           {showEndDatePicker && (
-                            <div className="absolute top-full left-0 mt-1 bg-white/10 backdrop-blur-lg border border-white/20 rounded-lg shadow-xl p-4 z-50">
+                            <div className="absolute top-full left-0 mt-1 bg-gray-900/95 border border-white/20 rounded-lg shadow-xl p-4 z-50">
                               <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-white font-medium">
                                   {monthNames[newEvent.endMonth]} {newEvent.endYear}
@@ -3287,9 +3331,13 @@ export default function Home() {
                                 <div className="flex gap-1">
                                   <button
                                     onClick={() => {
-                                      const newMonth = newEvent.endMonth === 0 ? 11 : newEvent.endMonth - 1
-                                      const newYear = newEvent.endMonth === 0 ? newEvent.endYear - 1 : newEvent.endYear
-                                      setNewEvent({ ...newEvent, endMonth: newMonth, endYear: newYear })
+                                      const newMonth = newEvent.endMonth - 1
+                                      const newYear = newEvent.endYear
+                                      setNewEvent({
+                                        ...newEvent,
+                                        endMonth: newMonth < 0 ? 11 : newMonth,
+                                        endYear: newMonth < 0 ? newYear - 1 : newYear,
+                                      })
                                     }}
                                     className="p-1 rounded-full hover:bg-white/20"
                                   >
@@ -3297,9 +3345,13 @@ export default function Home() {
                                   </button>
                                   <button
                                     onClick={() => {
-                                      const newMonth = newEvent.endMonth === 11 ? 0 : newEvent.endMonth + 1
-                                      const newYear = newEvent.endMonth === 11 ? newEvent.endYear + 1 : newEvent.endYear
-                                      setNewEvent({ ...newEvent, endMonth: newMonth, endYear: newYear })
+                                      const newMonth = newEvent.endMonth + 1
+                                      const newYear = newEvent.endYear
+                                      setNewEvent({
+                                        ...newEvent,
+                                        endMonth: newMonth > 11 ? 0 : newMonth,
+                                        endYear: newMonth > 11 ? newYear + 1 : newYear,
+                                      })
                                     }}
                                     className="p-1 rounded-full hover:bg-white/20"
                                   >
@@ -3339,12 +3391,14 @@ export default function Home() {
                   {/* Time Selection (only if not all day) */}
                   {!newEvent.isAllDay && (
                     <div className="grid grid-cols-2 gap-4">
+                      {/* Start Time */}
                       <div>
                         <label className="block text-white text-sm font-medium mb-2">Start Time</label>
                         <select
                           value={newEvent.startTime}
-                          onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })}
+                          onChange={(e) => handleTimeChange(e.target.value, true)}
                           className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          style={{ maxHeight: "200px" }}
                         >
                           {timeOptions.map((time) => (
                             <option key={time.value} value={time.value} className="bg-gray-800">
@@ -3354,12 +3408,14 @@ export default function Home() {
                         </select>
                       </div>
 
+                      {/* End Time */}
                       <div>
                         <label className="block text-white text-sm font-medium mb-2">End Time</label>
                         <select
                           value={newEvent.endTime}
-                          onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })}
+                          onChange={(e) => handleTimeChange(e.target.value, false)}
                           className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          style={{ maxHeight: "200px" }}
                         >
                           {timeOptions.map((time) => (
                             <option key={time.value} value={time.value} className="bg-gray-800">
@@ -3551,7 +3607,7 @@ export default function Home() {
                               </button>
 
                               {showRecurrenceEndDatePicker && (
-                                <div className="absolute top-full left-0 mt-1 bg-white/10 backdrop-blur-lg border border-white/20 rounded-lg shadow-xl p-4 z-50">
+                                <div className="absolute top-full left-0 mt-1 bg-gray-900/95 border border-white/20 rounded-lg shadow-xl p-4 z-50">
                                   <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-white font-medium">
                                       {monthNames[newEvent.recurrence.endDate?.getMonth() || new Date().getMonth()]}{" "}
