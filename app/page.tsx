@@ -75,12 +75,12 @@ interface GoogleCalendarEvent {
 // Update the event interface to include exactColor
 // Add this to your existing event type or create a new interface
 interface CalendarEvent {
-  id: number | string
+  id: string
   title: string
   startTime: string
   endTime: string
   color: string
-  exactColor?: string | null
+  exactColor: string | null
   day: number
   month: number
   year: number
@@ -89,23 +89,23 @@ interface CalendarEvent {
   attendees: string[]
   organizer: string
   source: "local" | "google"
-  isAllDay?: boolean
-  isMultiDay?: boolean
-  endDay?: number
-  endMonth?: number
-  endYear?: number
+  isAllDay: boolean
+  isMultiDay: boolean
+  endDay: number
+  endMonth: number
+  endYear: number
   googleId?: string
   calendarId?: string
   calendarName?: string
   recurringEventId?: string
-  isRecurring?: boolean
+  isRecurring: boolean
   recurrence?: {
     frequency: "daily" | "weekly" | "monthly" | "yearly"
     interval: number
-    daysOfWeek?: number[] // 0 = Sunday, 1 = Monday, etc.
-    endType: "never" | "date" | "count"
-    endDate?: Date
-    count?: number
+    daysOfWeek: number[]
+    endType: "never" | "count" | "date"
+    endDate: Date
+    count: number
   }
 }
 
@@ -420,84 +420,29 @@ export default function Home() {
   const timeOptions = generateTimeOptions()
 
   // Helper function to generate recurring events
-  const generateRecurringEvents = (baseEvent) => {
+  const generateRecurringEvents = (baseEvent: CalendarEvent): CalendarEvent[] => {
     if (!baseEvent.isRecurring || !baseEvent.recurrence) {
       return [baseEvent]
     }
 
-    const events = []
+    const events: CalendarEvent[] = [baseEvent]
     const { frequency, interval, daysOfWeek, endType, endDate, count } = baseEvent.recurrence
-    const startDate = new Date(baseEvent.year, baseEvent.month, baseEvent.day)
-    const currentDate = new Date(startDate)
-    let eventCount = 0
-    const maxEvents = endType === "count" ? count : 100 // Limit to prevent infinite loops
 
-    while (eventCount < maxEvents) {
-      // Check if we've reached the end date
-      if (endType === "date" && endDate && currentDate > endDate) {
-        break
-      }
+    let currentDate = new Date(baseEvent.year, baseEvent.month - 1, baseEvent.day)
+    const endDateTime = new Date(endDate)
 
-      // Check if we've reached the count limit
-      if (endType === "count" && eventCount >= count) {
-        break
-      }
-
-      // For weekly frequency, check if current day is in daysOfWeek
-      if (frequency === "weekly" && daysOfWeek && !daysOfWeek.includes(currentDate.getDay())) {
-        currentDate.setDate(currentDate.getDate() + 1)
-        continue
-      }
-
-      // Create event for current date
-      const eventEndDate = new Date(currentDate)
-      if (baseEvent.isMultiDay) {
-        const daysDiff =
-          new Date(baseEvent.endYear, baseEvent.endMonth, baseEvent.endDay).getTime() -
-          new Date(baseEvent.year, baseEvent.month, baseEvent.day).getTime()
-        eventEndDate.setTime(eventEndDate.getTime() + daysDiff)
-      }
-
-      events.push({
-        ...baseEvent,
-        id: `${baseEvent.id}_${eventCount}`,
-        day: currentDate.getDate(),
-        month: currentDate.getMonth(),
-        year: currentDate.getFullYear(),
-        endDay: eventEndDate.getDate(),
-        endMonth: eventEndDate.getMonth(),
-        endYear: eventEndDate.getFullYear(),
-      })
-
-      eventCount++
-
-      // Move to next occurrence based on frequency
+    while (
+      (endType === "never" && events.length < 100) || // Limit to 100 events for "never" end type
+      (endType === "count" && events.length < count) ||
+      (endType === "date" && currentDate <= endDateTime)
+    ) {
+      // Add interval based on frequency
       switch (frequency) {
         case "daily":
           currentDate.setDate(currentDate.getDate() + interval)
           break
         case "weekly":
-          if (daysOfWeek && daysOfWeek.length > 0) {
-            // Find next day in daysOfWeek
-            let nextDay = currentDate.getDay() + 1
-            let daysToAdd = 1
-
-            while (!daysOfWeek.includes(nextDay % 7)) {
-              nextDay++
-              daysToAdd++
-              if (daysToAdd > 7) break // Prevent infinite loop
-            }
-
-            // If we've gone through all days of the week, move to next week
-            if (daysToAdd > 7) {
-              currentDate.setDate(currentDate.getDate() + 7 * interval)
-              currentDate.setDate(currentDate.getDate() - currentDate.getDay() + daysOfWeek[0])
-            } else {
-              currentDate.setDate(currentDate.getDate() + daysToAdd)
-            }
-          } else {
-            currentDate.setDate(currentDate.getDate() + 7 * interval)
-          }
+          currentDate.setDate(currentDate.getDate() + 7 * interval)
           break
         case "monthly":
           currentDate.setMonth(currentDate.getMonth() + interval)
@@ -507,10 +452,24 @@ export default function Home() {
           break
       }
 
-      // Safety check to prevent infinite loops
-      if (currentDate.getFullYear() > new Date().getFullYear() + 5) {
-        break
+      // For weekly recurrence, check if the new date matches any of the selected days
+      if (frequency === "weekly") {
+        const dayOfWeek = currentDate.getDay()
+        if (!daysOfWeek.includes(dayOfWeek)) {
+          continue
+        }
       }
+
+      // Create new event for this occurrence
+      const newEvent: CalendarEvent = {
+        ...baseEvent,
+        id: `${baseEvent.id}-${events.length}`,
+        day: currentDate.getDate(),
+        month: currentDate.getMonth() + 1,
+        year: currentDate.getFullYear(),
+      }
+
+      events.push(newEvent)
     }
 
     return events
@@ -1122,11 +1081,14 @@ export default function Home() {
         }
 
         if (selectedEvent?.source === "google") {
-          // Update Google Calendar event
+          // Update Google Calendar event first
           const success = await updateGoogleCalendarEvent(newEvent, selectedEvent.googleId, selectedEvent.calendarId)
-          if (!success) return // Don't close modal if update failed
-        } else {
-          // Update local event - find and update the correct event
+          if (!success) {
+            setError("Failed to update Google Calendar event. Please try again.")
+            return // Don't close modal if update failed
+          }
+
+          // Then update local event
           setEvents((prevEvents) =>
             prevEvents.map((event) =>
               event.id === editingEventId
@@ -1148,7 +1110,43 @@ export default function Home() {
                     endYear: newEvent.endYear,
                     isRecurring: newEvent.isRecurring,
                     recurrence: newEvent.recurrence,
-                    // Preserve original event properties that shouldn't change
+                    // Preserve original event properties
+                    id: event.id,
+                    source: event.source,
+                    attendees: event.attendees,
+                    organizer: event.organizer,
+                    googleId: event.googleId,
+                    calendarId: event.calendarId,
+                    calendarName: event.calendarName,
+                    exactColor: event.exactColor,
+                  }
+                : event,
+            ),
+          )
+        } else {
+          // Update local event
+          setEvents((prevEvents) =>
+            prevEvents.map((event) =>
+              event.id === editingEventId
+                ? {
+                    ...event,
+                    title: newEvent.title,
+                    startTime: newEvent.startTime,
+                    endTime: newEvent.endTime,
+                    description: newEvent.description,
+                    location: newEvent.location,
+                    color: newEvent.color,
+                    day: newEvent.day,
+                    month: newEvent.month,
+                    year: newEvent.year,
+                    isAllDay: newEvent.isAllDay,
+                    isMultiDay: newEvent.isMultiDay,
+                    endDay: newEvent.endDay,
+                    endMonth: newEvent.endMonth,
+                    endYear: newEvent.endYear,
+                    isRecurring: newEvent.isRecurring,
+                    recurrence: newEvent.recurrence,
+                    // Preserve original event properties
                     id: event.id,
                     source: event.source,
                     attendees: event.attendees,
@@ -1167,7 +1165,10 @@ export default function Home() {
         if (user?.accessToken && selectedCalendarForNewEvents !== "local") {
           // Create Google Calendar event
           const success = await createGoogleCalendarEvent(newEvent, selectedCalendarForNewEvents)
-          if (!success) return // Don't close modal if creation failed
+          if (!success) {
+            setError("Failed to create Google Calendar event. Please try again.")
+            return // Don't close modal if creation failed
+          }
         } else {
           // Create local event(s)
           const baseEvent = {
