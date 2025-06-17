@@ -122,6 +122,25 @@ interface GoogleCalendar {
   colorId?: string
 }
 
+// Add these type declarations at the top of the file after the imports
+declare global {
+  interface Window {
+    google: {
+      accounts: {
+        id: {
+          initialize: (config: any) => void;
+          prompt: () => void;
+        };
+        oauth2: {
+          initTokenClient: (config: any) => {
+            requestAccessToken: (options: { prompt: string }) => void;
+          };
+        };
+      };
+    };
+  }
+}
+
 export default function Home() {
   const [isLoaded, setIsLoaded] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -187,11 +206,11 @@ export default function Home() {
     }
   }
 
-  const getDaysInMonth = (month, year) => {
+  const getDaysInMonth = (month: number, year: number): number => {
     return new Date(year, month + 1, 0).getDate()
   }
 
-  const getFirstDayOfMonth = (month, year) => {
+  const getFirstDayOfMonth = (month: number, year: number): number => {
     return new Date(year, month, 1).getDay()
   }
 
@@ -499,12 +518,14 @@ export default function Home() {
 
   // Google OAuth functions
   const initializeGoogleAuth = () => {
+    if (typeof window === 'undefined') return;
+    
     if (!isGoogleAuthEnabled) {
       setIsAuthLoading(false)
       return
     }
 
-    if (typeof window !== "undefined" && window.google && googleScriptLoaded) {
+    if (window.google && googleScriptLoaded) {
       try {
         window.google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
@@ -547,7 +568,7 @@ export default function Home() {
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: "https://www.googleapis.com/auth/calendar",
-        callback: (tokenResponse) => {
+        callback: (tokenResponse: { access_token?: string }) => {
           if (tokenResponse && tokenResponse.access_token) {
             const userData: GoogleUser = {
               id: payload.sub,
@@ -2282,10 +2303,10 @@ export default function Home() {
     setShowCreateModal(true)
   }
 
-  const toggleCalendarVisibility = async (calendarId) => {
+  const toggleCalendarVisibility = async (calendarId: string) => {
     setGoogleCalendars(
-      googleCalendars.map((calendar) =>
-        calendar.id === calendarId ? { ...calendar, visible: !calendar.visible } : calendar,
+      googleCalendars.map((cal: GoogleCalendar) =>
+        cal.id === calendarId ? { ...cal, visible: !cal.visible } : cal,
       ),
     )
 
@@ -2410,6 +2431,9 @@ export default function Home() {
   }
 
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+
     setIsLoaded(true)
 
     // Load Google API script
@@ -2433,11 +2457,6 @@ export default function Home() {
       initializeGoogleAuth()
     }
 
-    // Initialize Google Auth after script loads
-    if (googleScriptLoaded) {
-      initializeGoogleAuth()
-    }
-
     // Set initial timeline time
     const intervalId = setInterval(() => {
       setCurrentTime(new Date())
@@ -2447,7 +2466,10 @@ export default function Home() {
     return () => clearInterval(intervalId)
   }, [googleScriptLoaded])
 
+  // Separate useEffect for Google Auth initialization
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     if (googleScriptLoaded) {
       initializeGoogleAuth()
     }

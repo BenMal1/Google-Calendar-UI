@@ -39,6 +39,20 @@ export function SettingsProvider({ children, googleId }: { children: ReactNode; 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Load settings from localStorage on initial mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedSettings = localStorage.getItem('calendar_settings')
+      if (savedSettings) {
+        try {
+          setSettings(JSON.parse(savedSettings))
+        } catch (err) {
+          console.error('Error parsing saved settings:', err)
+        }
+      }
+    }
+  }, [])
+
   // Fetch settings
   const fetchSettings = useCallback(async (id: string) => {
     try {
@@ -50,9 +64,24 @@ export function SettingsProvider({ children, googleId }: { children: ReactNode; 
       }
       const data = await response.json()
       setSettings(data)
+      // Save to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('calendar_settings', JSON.stringify(data))
+      }
     } catch (err) {
       console.error("Error fetching settings:", err)
       setError("Failed to load settings")
+      // If API fails, try to load from localStorage
+      if (typeof window !== 'undefined') {
+        const savedSettings = localStorage.getItem('calendar_settings')
+        if (savedSettings) {
+          try {
+            setSettings(JSON.parse(savedSettings))
+          } catch (parseErr) {
+            console.error('Error parsing saved settings:', parseErr)
+          }
+        }
+      }
     } finally {
       setIsLoading(false)
     }
@@ -83,13 +112,22 @@ export function SettingsProvider({ children, googleId }: { children: ReactNode; 
 
       const { settings: updatedSettings } = await response.json()
       setSettings(updatedSettings)
+      // Save to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('calendar_settings', JSON.stringify(updatedSettings))
+      }
     } catch (err) {
       console.error("Error saving settings:", err)
       setError("Failed to save settings")
+      // If API fails, still update localStorage
+      if (settings && typeof window !== 'undefined') {
+        const updatedSettings = { ...settings, ...updates }
+        localStorage.setItem('calendar_settings', JSON.stringify(updatedSettings))
+      }
     } finally {
       setIsLoading(false)
     }
-  }, [googleId])
+  }, [googleId, settings])
 
   // Debounced save function
   const debouncedSaveSettings = useDebounce(updateSettings, 300)
