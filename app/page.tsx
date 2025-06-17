@@ -99,6 +99,7 @@ interface CalendarEvent {
   calendarName?: string
   recurringEventId?: string
   isRecurring: boolean
+  isModified?: boolean
   recurrence?: {
     frequency: "daily" | "weekly" | "monthly" | "yearly"
     interval: number
@@ -680,14 +681,24 @@ export default function Home() {
 
       setGoogleCalendarEvents(allEvents)
 
-      // Convert Google Calendar events to our app's format and merge with local events
+      // Convert Google Calendar events to our app's format
       const googleEvents = convertGoogleEvents(allEvents)
 
-      // Filter out local events (keep only those with source: "local")
+      // Get existing local events
       const localEvents = events.filter((event) => event.source === "local")
 
-      // Merge local events with Google events
-      setEvents([...localEvents, ...googleEvents])
+      // Get existing Google events that have been modified locally
+      const modifiedGoogleEvents = events.filter(
+        (event) => event.source === "google" && event.googleId && event.isModified
+      )
+
+      // Filter out Google events that have been modified locally
+      const unmodifiedGoogleEvents = googleEvents.filter(
+        (event) => !modifiedGoogleEvents.some((modified) => modified.googleId === event.googleId)
+      )
+
+      // Merge all events, prioritizing local modifications
+      setEvents([...localEvents, ...modifiedGoogleEvents, ...unmodifiedGoogleEvents])
       setLastSyncTime(new Date())
       setSyncStatus("synced")
     } catch (error) {
