@@ -512,41 +512,52 @@ export default function Home() {
     if (typeof window === 'undefined') return;
     
     if (!isGoogleAuthEnabled) {
-      setIsAuthLoading(false)
-      return
+      console.log("Google Auth is not enabled - missing client ID");
+      setIsAuthLoading(false);
+      return;
+    }
+
+    if (!GOOGLE_CLIENT_ID) {
+      console.error("Google Client ID is missing");
+      setAuthError("Google Sign-In is not properly configured. Please check your environment variables.");
+      setIsAuthLoading(false);
+      return;
     }
 
     if (window.google && googleScriptLoaded) {
       try {
+        console.log("Initializing Google Auth with client ID:", GOOGLE_CLIENT_ID);
         window.google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
           callback: handleGoogleSignIn,
           auto_select: false,
           cancel_on_tap_outside: false,
-        })
+        });
 
         // Check for existing session
-        const savedUser = localStorage.getItem("calendar_user")
+        const savedUser = localStorage.getItem("calendar_user");
         if (savedUser) {
           try {
-            const parsedUser = JSON.parse(savedUser)
-            setUser(parsedUser)
+            const parsedUser = JSON.parse(savedUser);
+            setUser(parsedUser);
 
             // If we have a saved access token, fetch calendars and events
             if (parsedUser.accessToken) {
-              fetchGoogleCalendars(parsedUser.accessToken)
+              fetchGoogleCalendars(parsedUser.accessToken);
             }
           } catch (error) {
-            console.error("Error parsing saved user:", error)
-            localStorage.removeItem("calendar_user")
+            console.error("Error parsing saved user:", error);
+            localStorage.removeItem("calendar_user");
           }
         }
-        setAuthError(null)
+        setAuthError(null);
       } catch (error) {
-        console.error("Error initializing Google Auth:", error)
-        setAuthError("Google Sign-In is not available for this domain. Please configure your OAuth settings.")
+        console.error("Error initializing Google Auth:", error);
+        setAuthError("Google Sign-In is not available. Please check your browser console for details.");
       }
-      setIsAuthLoading(false)
+      setIsAuthLoading(false);
+    } else {
+      console.log("Google script not loaded yet");
     }
   }
 
@@ -2307,14 +2318,29 @@ export default function Home() {
     if (typeof window === "undefined") return;
     
     if (!window.google) {
+      console.error("Google API not loaded");
       setAuthError("Google Sign-In is not ready. Please try again in a moment.");
       return;
     }
 
+    if (!GOOGLE_CLIENT_ID) {
+      console.error("Google Client ID is missing");
+      setAuthError("Google Sign-In is not properly configured. Please check your environment variables.");
+      return;
+    }
+
     try {
+      console.log("Prompting Google Sign-In");
       window.google.accounts.id.prompt((notification) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          setAuthError("Unable to show Google Sign-In prompt. Please try again.");
+        if (notification.isNotDisplayed()) {
+          console.error("Google Sign-In prompt not displayed:", notification);
+          setAuthError("Unable to show Google Sign-In prompt. Please check your browser settings.");
+        } else if (notification.isSkippedMoment()) {
+          console.log("Google Sign-In prompt skipped");
+          setAuthError("Sign-In prompt was skipped. Please try again.");
+        } else if (notification.isDismissedMoment()) {
+          console.log("Google Sign-In prompt dismissed");
+          setAuthError("Sign-In prompt was dismissed. Please try again.");
         }
       });
     } catch (error) {
