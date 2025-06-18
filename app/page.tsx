@@ -99,7 +99,6 @@ interface CalendarEvent {
   calendarName?: string
   recurringEventId?: string
   isRecurring: boolean
-  isModified?: boolean
   recurrence?: {
     frequency: "daily" | "weekly" | "monthly" | "yearly"
     interval: number
@@ -199,6 +198,23 @@ export default function Home() {
   const [showTimeline, setShowTimeline] = useState(false)
   const [timelineCurrentTime, setTimelineCurrentTime] = useState(new Date())
 
+  // At the top of the component
+  const [isClient, setIsClient] = useState(false);
+  const [clientTimeLinePosition, setClientTimeLinePosition] = useState<number | null>(null);
+
+  // At the top of the Home component, add:
+  const [showStartTimeDropdown, setShowStartTimeDropdown] = useState(false);
+  const [showEndTimeDropdown, setShowEndTimeDropdown] = useState(false);
+
+  // Add a state to track if the user has manually set the start time in the create event modal
+  const [hasSetStartTime, setHasSetStartTime] = useState(false);
+
+  // Add state for title error
+  const [titleError, setTitleError] = useState("");
+
+  // Add a state to track if the user has attempted to submit
+  const [triedSubmit, setTriedSubmit] = useState(false);
+
   const getCurrentDateInfo = () => {
     return {
       day: currentDate.getDate(),
@@ -272,10 +288,15 @@ export default function Home() {
   // Update the handleTimeChange function
   const handleTimeChange = (time: string, isStartTime: boolean): void => {
     if (isStartTime) {
-      const newEndTime = addOneHour(time)
-      setNewEvent({ ...newEvent, startTime: time, endTime: newEndTime })
+      if (!isEditMode && !hasSetStartTime) {
+        const newEndTime = addOneHour(time);
+        setNewEvent({ ...newEvent, startTime: time, endTime: newEndTime });
+        setHasSetStartTime(true);
+      } else {
+        setNewEvent({ ...newEvent, startTime: time });
+      }
     } else {
-      setNewEvent({ ...newEvent, endTime: time })
+      setNewEvent({ ...newEvent, endTime: time });
     }
   }
 
@@ -431,10 +452,11 @@ export default function Home() {
 
     let currentDate = new Date(baseEvent.year, baseEvent.month - 1, baseEvent.day)
     const endDateTime = new Date(endDate)
+    let eventCount = 1
 
     while (
-      (endType === "never" && events.length < 100) || // Limit to 100 events for "never" end type
-      (endType === "count" && events.length < count) ||
+      (endType === "never" && eventCount < 100) || // Limit to 100 events for "never" end type
+      (endType === "count" && eventCount < count) ||
       (endType === "date" && currentDate <= endDateTime)
     ) {
       // Add interval based on frequency
@@ -443,7 +465,15 @@ export default function Home() {
           currentDate.setDate(currentDate.getDate() + interval)
           break
         case "weekly":
-          currentDate.setDate(currentDate.getDate() + 7 * interval)
+          // For weekly recurrence, we need to find the next occurrence that matches the selected days
+          let daysToAdd = 1
+          while (daysToAdd <= 7 * interval) {
+            currentDate.setDate(currentDate.getDate() + 1)
+            if (daysOfWeek.includes(currentDate.getDay())) {
+              break
+            }
+            daysToAdd++
+          }
           break
         case "monthly":
           currentDate.setMonth(currentDate.getMonth() + interval)
@@ -453,24 +483,25 @@ export default function Home() {
           break
       }
 
-      // For weekly recurrence, check if the new date matches any of the selected days
-      if (frequency === "weekly") {
-        const dayOfWeek = currentDate.getDay()
-        if (!daysOfWeek.includes(dayOfWeek)) {
-          continue
-        }
+      // Skip if we've exceeded the end date
+      if (endType === "date" && currentDate > endDateTime) {
+        break
       }
 
       // Create new event for this occurrence
       const newEvent: CalendarEvent = {
         ...baseEvent,
-        id: `${baseEvent.id}-${events.length}`,
+        id: `${baseEvent.id}-${eventCount}`,
         day: currentDate.getDate(),
         month: currentDate.getMonth() + 1,
         year: currentDate.getFullYear(),
+        endDay: baseEvent.isMultiDay ? new Date(currentDate.getTime() + (baseEvent.endDay - baseEvent.day) * 24 * 60 * 60 * 1000).getDate() : currentDate.getDate(),
+        endMonth: baseEvent.isMultiDay ? new Date(currentDate.getTime() + (baseEvent.endDay - baseEvent.day) * 24 * 60 * 60 * 1000).getMonth() + 1 : currentDate.getMonth() + 1,
+        endYear: baseEvent.isMultiDay ? new Date(currentDate.getTime() + (baseEvent.endDay - baseEvent.day) * 24 * 60 * 60 * 1000).getFullYear() : currentDate.getFullYear(),
       }
 
       events.push(newEvent)
+      eventCount++
     }
 
     return events
@@ -681,24 +712,14 @@ export default function Home() {
 
       setGoogleCalendarEvents(allEvents)
 
-      // Convert Google Calendar events to our app's format
+      // Convert Google Calendar events to our app's format and merge with local events
       const googleEvents = convertGoogleEvents(allEvents)
 
-      // Get existing local events
+      // Filter out local events (keep only those with source: "local")
       const localEvents = events.filter((event) => event.source === "local")
 
-      // Get existing Google events that have been modified locally
-      const modifiedGoogleEvents = events.filter(
-        (event) => event.source === "google" && event.googleId && event.isModified
-      )
-
-      // Filter out Google events that have been modified locally
-      const unmodifiedGoogleEvents = googleEvents.filter(
-        (event) => !modifiedGoogleEvents.some((modified) => modified.googleId === event.googleId)
-      )
-
-      // Merge all events, prioritizing local modifications
-      setEvents([...localEvents, ...modifiedGoogleEvents, ...unmodifiedGoogleEvents])
+      // Merge local events with Google events
+      setEvents([...localEvents, ...googleEvents])
       setLastSyncTime(new Date())
       setSyncStatus("synced")
     } catch (error) {
@@ -1078,6 +1099,13 @@ export default function Home() {
   }
 
   const handleSaveEvent = async () => {
+    setTriedSubmit(true);
+    if (!newEvent.title || newEvent.title.trim() === "") {
+      setTitleError("Needs an event title");
+      return;
+    } else {
+      setTitleError("");
+    }
     if (newEvent.title && newEvent.startTime && newEvent.endTime) {
       if (isEditMode) {
         // Check if this is a recurring event and show confirmation dialog
@@ -1521,8 +1549,7 @@ export default function Home() {
       },
     })
 
-    setIsCreatingEvent(true)
-    setShowCreateModal(true)
+    openCreateEventModal();
 
     // Reset drag state
     setDragStart(null)
@@ -1751,17 +1778,14 @@ export default function Home() {
               ))}
 
               {/* Current Time Line - Only for current day */}
-              {showTimeLine && (
+              {showTimeLine && isClient && clientTimeLinePosition !== null && (
                 <div
                   className="absolute left-0 right-0 z-30 pointer-events-none"
-                  style={{ top: `${timeLinePosition}px` }}
+                  style={{ top: `${clientTimeLinePosition}px` }}
                 >
                   <div className="flex items-center">
-                    <div className="w-3 h-3 bg-orange-500 rounded-full shadow-lg"></div>
+                    <div className="w-2 h-2 bg-orange-500 rounded-full shadow-lg"></div>
                     <div className="flex-1 h-0.5 bg-orange-500 shadow-lg"></div>
-                    <div className="ml-2 text-xs text-orange-500 font-medium bg-black/50 px-2 py-1 rounded backdrop-blur-sm">
-                      {currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </div>
                   </div>
                 </div>
               )}
@@ -2493,6 +2517,77 @@ export default function Home() {
     }
   }
 
+  // At the top of the component
+  const startTimeDropdownRef = useRef<HTMLDivElement>(null);
+  const endTimeDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        startTimeDropdownRef.current &&
+        !startTimeDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowStartTimeDropdown(false);
+      }
+      if (
+        endTimeDropdownRef.current &&
+        !endTimeDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowEndTimeDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+    setClientTimeLinePosition(getCurrentTimeLinePosition());
+    const interval = setInterval(() => {
+      setClientTimeLinePosition(getCurrentTimeLinePosition());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [isClient, /* add dependencies for getCurrentTimeLinePosition if needed */]);
+
+  // When opening the create event modal, reset hasSetStartTime
+  const openCreateEventModal = () => {
+    setShowCreateModal(true);
+    setIsEditMode(false);
+    setSelectedEvent(null);
+    setHasSetStartTime(false);
+    setTitleError("");
+    setTriedSubmit(false);
+  };
+
+  // Add refs for the dropdown menus
+  const startTimeDropdownMenuRef = useRef<HTMLUListElement>(null);
+  const endTimeDropdownMenuRef = useRef<HTMLUListElement>(null);
+
+  // Scroll selected item into view when dropdown opens
+  useEffect(() => {
+    if (showStartTimeDropdown && startTimeDropdownMenuRef.current) {
+      const selected = startTimeDropdownMenuRef.current.querySelector('li[aria-selected="true"]');
+      if (selected) {
+        (selected as HTMLElement).scrollIntoView({ block: 'center' });
+      }
+    }
+  }, [showStartTimeDropdown]);
+
+  useEffect(() => {
+    if (showEndTimeDropdown && endTimeDropdownMenuRef.current) {
+      const selected = endTimeDropdownMenuRef.current.querySelector('li[aria-selected="true"]');
+      if (selected) {
+        (selected as HTMLElement).scrollIntoView({ block: 'center' });
+      }
+    }
+  }, [showEndTimeDropdown]);
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
       {/* Background Image with dynamic blur effect */}
@@ -2548,15 +2643,15 @@ export default function Home() {
 
       {/* Navigation */}
       <header
-        className={`absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-8 py-6 opacity-0 ${isLoaded ? "animate-fade-in" : ""}`}
-        style={{ animationDelay: "0.2s", pointerEvents: "auto" }}
+        className={`absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-8 py-6 opacity-0 pointer-events-auto ${isLoaded ? "animate-fade-in" : ""}`}
+        style={{ animationDelay: "0.2s" }}
       >
         <div className="flex items-center gap-4">
-          <span className="text-2xl font-semibold text-white drop-shadow-lg">Google Calendar Reworked</span>
+          <span className="text-2xl font-semibold text-white drop-shadow-lg relative z-0">Calendar Interface</span>
 
           {/* Google Calendar Sync Status */}
           {user && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 z-30 relative">
               <button
                 onClick={handleRefreshCalendar}
                 disabled={syncStatus === "syncing"}
@@ -2599,98 +2694,6 @@ export default function Home() {
             </div>
           )}
         </div>
-
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleSettingsClick}
-            className="group relative p-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/20 hover:border-white/30 transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl z-20 pointer-events-auto"
-            style={{ pointerEvents: "auto" }}
-          >
-            <Settings className="h-6 w-6 text-white drop-shadow-md group-hover:rotate-90 transition-transform duration-300 ease-in-out" />
-            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          </button>
-
-          {/* User Profile / Login */}
-          <div className="relative" ref={userMenuRef}>
-            {isAuthLoading ? (
-              <div className="h-10 w-10 rounded-full bg-gray-400 animate-pulse"></div>
-            ) : user ? (
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="h-10 w-10 rounded-full overflow-hidden border-2 border-white/20 hover:border-white/40 transition-colors"
-              >
-                <Image
-                  src={user.picture || "/placeholder.svg"}
-                  alt={user.name}
-                  width={40}
-                  height={40}
-                  className="object-cover"
-                />
-              </button>
-            ) : (
-              <button
-                onClick={promptGoogleSignIn}
-                className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold shadow-md hover:bg-blue-600 transition-colors"
-                title={
-                  authError
-                    ? "Google Sign-In not available"
-                    : isGoogleAuthEnabled
-                      ? "Sign in with Google"
-                      : "Google Sign-In not configured"
-                }
-              >
-                <User className="h-5 w-5" />
-              </button>
-            )}
-
-            {/* User Menu Dropdown */}
-            {showUserMenu && user && (
-              <div className="absolute right-0 top-12 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl shadow-xl p-4 min-w-[200px] z-50">
-                <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/20">
-                  <Image
-                    src={user.picture || "/placeholder.svg"}
-                    alt={user.name}
-                    width={32}
-                    height={32}
-                    className="rounded-full"
-                  />
-                  <div>
-                    <div className="text-white font-medium text-sm">{user.name}</div>
-                    <div className="text-white/70 text-xs">{user.email}</div>
-                  </div>
-                </div>
-
-                {/* Calendar sync status */}
-                <div className="mb-3 pb-3 border-b border-white/20">
-                  <div className="text-xs text-white/70 mb-1">Google Calendar</div>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${user.accessToken ? "bg-green-400" : "bg-red-400"}`}></div>
-                    <span className="text-xs text-white">{user.accessToken ? "Connected" : "Not connected"}</span>
-                  </div>
-                  {googleCalendars.length > 0 && (
-                    <div className="text-xs text-white/60 mt-1">
-                      {googleCalendars.filter((cal) => cal.visible).length} of {googleCalendars.length} calendars
-                      visible
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={handleGoogleSignOut}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-white/90 hover:bg-white/10 rounded-lg transition-colors text-sm"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </button>
-              </div>
-            )}
-
-            {/* Google Sign In Button Container - Only show if Google Auth is enabled and no error */}
-            {!user && !isAuthLoading && isGoogleAuthEnabled && !authError && (
-              <div id="google-signin-button" className="absolute right-0 top-12 z-50"></div>
-            )}
-          </div>
-        </div>
       </header>
 
       {/* Main Content */}
@@ -2709,7 +2712,7 @@ export default function Home() {
               <div className="p-4 flex-1 flex flex-col">
                 <div className="flex items-center justify-between mb-6">
                   <button
-                    onClick={handleCreateEvent}
+                    onClick={openCreateEventModal}
                     className="flex items-center justify-center gap-2 rounded-full bg-blue-500 px-4 py-3 text-white hover:bg-blue-600 transition-colors flex-1"
                   >
                     <Plus className="h-5 w-5" />
@@ -2913,7 +2916,7 @@ export default function Home() {
               {/* Bottom Create Button */}
               <div className="p-4">
                 <button
-                  onClick={handleCreateEvent}
+                  onClick={openCreateEventModal}
                   className="flex items-center justify-center gap-2 rounded-full bg-blue-500 p-4 text-white w-14 h-14 hover:bg-blue-600 transition-colors"
                 >
                   <Plus className="h-6 w-6" />
@@ -3175,23 +3178,28 @@ export default function Home() {
                   <h2 className="text-2xl font-bold text-white">{isEditMode ? "Edit Event" : "Create New Event"}</h2>
                   <button
                     onClick={handleCloseCreateModal}
-                    className="p-2 rounded-full hover:bg-white/20 transition-colors"
+                    className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors focus:outline-none"
+                    aria-label="Close"
                   >
-                    <X className="w-6 h-6 text-white" />
+                    <X className="w-5 h-5 text-white" />
                   </button>
                 </div>
 
                 <div className="space-y-4">
                   {/* Event Title */}
-                  <div>
-                    <label className="block text-white text-sm font-medium mb-2">Event Title</label>
+                  <div className="mb-4">
+                    <label className="block text-white text-sm font-medium mb-2">Title</label>
                     <input
                       type="text"
                       value={newEvent.title}
-                      onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
-                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter event title"
+                      onChange={e => {
+                        setNewEvent({ ...newEvent, title: e.target.value });
+                        if (triedSubmit && titleError) setTitleError("");
+                      }}
+                      className={`w-full px-3 py-2 rounded-md text-white bg-white/10 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${titleError && triedSubmit ? 'border-red-500' : 'border-white/20'}`}
+                      placeholder="Event title"
                     />
+                    {titleError && triedSubmit && <div className="text-red-500 text-xs mt-1">{titleError}</div>}
                   </div>
 
                   {/* Calendar Selection for New Events */}
@@ -3421,35 +3429,81 @@ export default function Home() {
                       {/* Start Time */}
                       <div>
                         <label className="block text-white text-sm font-medium mb-2">Start Time</label>
-                        <select
-                          value={newEvent.startTime}
-                          onChange={(e) => handleTimeChange(e.target.value, true)}
-                          className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          style={{ maxHeight: "200px" }}
-                        >
-                          {timeOptions.map((time) => (
-                            <option key={time.value} value={time.value} className="bg-gray-800">
-                              {time.label}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="relative" ref={startTimeDropdownRef}>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onClick={() => setShowStartTimeDropdown(!showStartTimeDropdown)}
+                            aria-haspopup="listbox"
+                            aria-expanded={showStartTimeDropdown}
+                          >
+                            {timeOptions.find((t) => t.value === newEvent.startTime)?.label}
+                          </button>
+                          {showStartTimeDropdown && (
+                            <ul
+                              ref={startTimeDropdownMenuRef}
+                              tabIndex={-1}
+                              className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-gray-900/95 border border-white/20 rounded-lg shadow-xl p-4 pointer-events-auto"
+                              role="listbox"
+                              onBlur={() => setShowStartTimeDropdown(false)}
+                            >
+                              {timeOptions.map((time) => (
+                                <li
+                                  key={time.value}
+                                  role="option"
+                                  aria-selected={newEvent.startTime === time.value}
+                                  className={`px-4 py-2 cursor-pointer text-white hover:bg-white/30 transition-colors ${newEvent.startTime === time.value ? "bg-blue-500/70" : ""}`}
+                                  onClick={() => {
+                                    handleTimeChange(time.value, true)
+                                    setShowStartTimeDropdown(false)
+                                  }}
+                                >
+                                  {time.label}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       </div>
 
                       {/* End Time */}
                       <div>
                         <label className="block text-white text-sm font-medium mb-2">End Time</label>
-                        <select
-                          value={newEvent.endTime}
-                          onChange={(e) => handleTimeChange(e.target.value, false)}
-                          className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          style={{ maxHeight: "200px" }}
-                        >
-                          {timeOptions.map((time) => (
-                            <option key={time.value} value={time.value} className="bg-gray-800">
-                              {time.label}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="relative" ref={endTimeDropdownRef}>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onClick={() => setShowEndTimeDropdown(!showEndTimeDropdown)}
+                            aria-haspopup="listbox"
+                            aria-expanded={showEndTimeDropdown}
+                          >
+                            {timeOptions.find((t) => t.value === newEvent.endTime)?.label}
+                          </button>
+                          {showEndTimeDropdown && (
+                            <ul
+                              ref={endTimeDropdownMenuRef}
+                              tabIndex={-1}
+                              className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-gray-900/95 border border-white/20 rounded-lg shadow-xl p-4 pointer-events-auto"
+                              role="listbox"
+                              onBlur={() => setShowEndTimeDropdown(false)}
+                            >
+                              {timeOptions.map((time) => (
+                                <li
+                                  key={time.value}
+                                  role="option"
+                                  aria-selected={newEvent.endTime === time.value}
+                                  className={`px-4 py-2 cursor-pointer text-white hover:bg-white/30 transition-colors ${newEvent.endTime === time.value ? "bg-blue-500/70" : ""}`}
+                                  onClick={() => {
+                                    handleTimeChange(time.value, false)
+                                    setShowEndTimeDropdown(false)
+                                  }}
+                                >
+                                  {time.label}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -3503,18 +3557,10 @@ export default function Home() {
                             }
                             className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
-                            <option value="daily" className="bg-gray-800">
-                              Daily
-                            </option>
-                            <option value="weekly" className="bg-gray-800">
-                              Weekly
-                            </option>
-                            <option value="monthly" className="bg-gray-800">
-                              Monthly
-                            </option>
-                            <option value="yearly" className="bg-gray-800">
-                              Yearly
-                            </option>
+                            <option value="daily" className="bg-gray-800">Daily</option>
+                            <option value="weekly" className="bg-gray-800">Weekly</option>
+                            <option value="monthly" className="bg-gray-800">Monthly</option>
+                            <option value="yearly" className="bg-gray-800">Yearly</option>
                           </select>
                         </div>
 
@@ -4239,6 +4285,99 @@ export default function Home() {
           flex-direction: column;
         }
       `}</style>
+
+      {/* Settings and Login/Profile Buttons - Always on Top */}
+      <div className="fixed top-6 right-8 flex items-center gap-4 z-[100]">
+        <button
+          onClick={handleSettingsClick}
+          className="group relative p-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/20 hover:border-white/30 transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl z-[100] pointer-events-auto"
+          style={{ pointerEvents: "auto" }}
+        >
+          <Settings className="h-6 w-6 text-white drop-shadow-md group-hover:rotate-90 transition-transform duration-300 ease-in-out" />
+          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        </button>
+
+        {/* User Profile / Login */}
+        <div className="relative z-[100]" ref={userMenuRef}>
+          {isAuthLoading ? (
+            <div className="h-10 w-10 rounded-full bg-gray-400 animate-pulse"></div>
+          ) : user ? (
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="h-10 w-10 rounded-full overflow-hidden border-2 border-white/20 hover:border-white/40 transition-colors"
+            >
+              <Image
+                src={user.picture || "/placeholder.svg"}
+                alt={user.name}
+                width={40}
+                height={40}
+                className="object-cover"
+              />
+            </button>
+          ) : (
+            <button
+              onClick={promptGoogleSignIn}
+              className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold shadow-md hover:bg-blue-600 transition-colors"
+              title={
+                authError
+                  ? "Google Sign-In not available"
+                  : isGoogleAuthEnabled
+                    ? "Sign in with Google"
+                    : "Google Sign-In not configured"
+              }
+            >
+              <User className="h-5 w-5" />
+            </button>
+          )}
+
+          {/* User Menu Dropdown */}
+          {showUserMenu && user && (
+            <div className="absolute right-0 top-12 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl shadow-xl p-4 min-w-[200px] z-[100]">
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/20">
+                <Image
+                  src={user.picture || "/placeholder.svg"}
+                  alt={user.name}
+                  width={32}
+                  height={32}
+                  className="rounded-full"
+                />
+                <div>
+                  <div className="text-white font-medium text-sm">{user.name}</div>
+                  <div className="text-white/70 text-xs">{user.email}</div>
+                </div>
+              </div>
+
+              {/* Calendar sync status */}
+              <div className="mb-3 pb-3 border-b border-white/20">
+                <div className="text-xs text-white/70 mb-1">Google Calendar</div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${user.accessToken ? "bg-green-400" : "bg-red-400"}`}></div>
+                  <span className="text-xs text-white">{user.accessToken ? "Connected" : "Not connected"}</span>
+                </div>
+                {googleCalendars.length > 0 && (
+                  <div className="text-xs text-white/60 mt-1">
+                    {googleCalendars.filter((cal) => cal.visible).length} of {googleCalendars.length} calendars
+                    visible
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={handleGoogleSignOut}
+                className="w-full flex items-center gap-2 px-3 py-2 text-white/90 hover:bg-white/10 rounded-lg transition-colors text-sm"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign Out
+              </button>
+            </div>
+          )}
+
+          {/* Google Sign In Button Container - Only show if Google Auth is enabled and no error */}
+          {!user && !isAuthLoading && isGoogleAuthEnabled && !authError && (
+            <div id="google-signin-button" className="absolute right-0 top-12 z-[100]"></div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

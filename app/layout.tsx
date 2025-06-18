@@ -6,8 +6,8 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Google Calendar Reworked",
-  description: "Advanced calendar system with Google Calendar integration and modern interface",
+  title: "Calendar Interface",
+  description: "A modern calendar interface with Google Calendar integration",
     generator: 'v0.dev'
 }
 
