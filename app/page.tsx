@@ -2304,8 +2304,22 @@ export default function Home() {
   }
 
   const promptGoogleSignIn = () => {
-    if (typeof window !== "undefined" && window.google) {
-      window.google.accounts.id.prompt()
+    if (typeof window === "undefined") return;
+    
+    if (!window.google) {
+      setAuthError("Google Sign-In is not ready. Please try again in a moment.");
+      return;
+    }
+
+    try {
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          setAuthError("Unable to show Google Sign-In prompt. Please try again.");
+        }
+      });
+    } catch (error) {
+      console.error("Error showing Google Sign-In prompt:", error);
+      setAuthError("Failed to show Google Sign-In prompt. Please try again.");
     }
   }
 
@@ -2474,23 +2488,32 @@ export default function Home() {
 
     // Load Google API script
     const loadGoogleScript = () => {
-      const script = document.createElement("script")
-      script.src = "https://accounts.google.com/gsi/client"
-      script.async = true
+      if (typeof window === "undefined") return;
+      
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      
       script.onload = () => {
-        setGoogleScriptLoaded(true)
-      }
+        setGoogleScriptLoaded(true);
+        // Initialize auth immediately after script loads
+        initializeGoogleAuth();
+      };
+      
       script.onerror = () => {
-        console.error("Failed to load Google API script.")
-        setAuthError("Failed to load Google API. Please check your internet connection.")
-      }
-      document.body.appendChild(script)
-    }
+        console.error("Failed to load Google API script.");
+        setAuthError("Failed to load Google API. Please check your internet connection.");
+        setIsAuthLoading(false);
+      };
+      
+      document.body.appendChild(script);
+    };
 
     if (isGoogleAuthEnabled && !googleScriptLoaded) {
-      loadGoogleScript()
+      loadGoogleScript();
     } else if (isGoogleAuthEnabled && googleScriptLoaded) {
-      initializeGoogleAuth()
+      initializeGoogleAuth();
     }
 
     // Set initial timeline time
