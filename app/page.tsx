@@ -532,6 +532,8 @@ export default function Home() {
           callback: handleGoogleSignIn,
           auto_select: false,
           cancel_on_tap_outside: false,
+          context: 'signin', // Add context for FedCM
+          use_fedcm_for_prompt: true, // Opt-in to FedCM
         });
 
         // Check for existing session
@@ -2334,7 +2336,13 @@ export default function Home() {
       window.google.accounts.id.prompt((notification) => {
         if (notification.isNotDisplayed()) {
           console.error("Google Sign-In prompt not displayed:", notification);
-          setAuthError("Unable to show Google Sign-In prompt. Please check your browser settings.");
+          // Try alternative sign-in method if One Tap fails
+          const client = window.google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID,
+            scope: 'https://www.googleapis.com/auth/calendar',
+            callback: handleGoogleSignIn,
+          });
+          client.requestAccessToken({ prompt: 'consent' });
         } else if (notification.isSkippedMoment()) {
           console.log("Google Sign-In prompt skipped");
           setAuthError("Sign-In prompt was skipped. Please try again.");

@@ -15,7 +15,7 @@ const nextConfig = {
     unoptimized: true,
   },
   env: {
-    NEXT_PUBLIC_GOOGLE_CLIENT_ID: '392195924334-3hdvc5ffufrbat8svngei114h6t64681.apps.googleusercontent.com',
+    NEXT_PUBLIC_GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
   },
 }
 
