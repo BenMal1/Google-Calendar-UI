@@ -567,17 +567,67 @@ export default function Home() {
     try {
       console.log("Handling Google Sign-In response:", response);
       
-      if (!response || !response.credential) {
-        console.error("Invalid response from Google Sign-In");
-        setAuthError("Invalid response from Google Sign-In. Please try again.");
+      // Handle both One Tap and OAuth2 responses
+      const credential = response.credential || response.access_token;
+      if (!credential) {
+        console.error("No credential received from Google Sign-In");
+        setAuthError("Failed to get credentials from Google Sign-In. Please try again.");
         return;
       }
 
-      // Decode the JWT token
-      const decodedToken = JSON.parse(atob(response.credential.split('.')[1]));
-      console.log("Decoded token:", decodedToken);
+      let userData;
+      if (response.credential) {
+        // One Tap response
+        const decodedToken = JSON.parse(atob(response.credential.split('.')[1]));
+        console.log("Decoded token:", decodedToken);
+        userData = {
+          id: decodedToken.sub,
+          name: decodedToken.name,
+          email: decodedToken.email,
+          picture: decodedToken.picture,
+          given_name: decodedToken.given_name,
+          family_name: decodedToken.family_name,
+        };
+      } else {
+        // OAuth2 response
+        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: 'https://www.googleapis.com/auth/calendar',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse.error) {
+              console.error("Error getting access token:", tokenResponse.error);
+              setAuthError("Failed to get calendar access. Please try again.");
+              return;
+            }
 
-      // Get access token for Google Calendar API
+            const accessToken = tokenResponse.access_token;
+            console.log("Got access token");
+
+            // Create user object
+            const user: GoogleUser = {
+              id: response.id,
+              name: response.name,
+              email: response.email,
+              picture: response.picture,
+              given_name: response.given_name,
+              family_name: response.family_name,
+              accessToken: accessToken,
+            };
+
+            // Save user to state and localStorage
+            setUser(user);
+            localStorage.setItem("calendar_user", JSON.stringify(user));
+
+            // Fetch calendars and events
+            await fetchGoogleCalendars(accessToken);
+          },
+        });
+
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+        return;
+      }
+
+      // For One Tap flow, get calendar access
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'https://www.googleapis.com/auth/calendar',
@@ -591,14 +641,9 @@ export default function Home() {
           const accessToken = tokenResponse.access_token;
           console.log("Got access token");
 
-          // Create user object
+          // Create user object with access token
           const user: GoogleUser = {
-            id: decodedToken.sub,
-            name: decodedToken.name,
-            email: decodedToken.email,
-            picture: decodedToken.picture,
-            given_name: decodedToken.given_name,
-            family_name: decodedToken.family_name,
+            ...userData,
             accessToken: accessToken,
           };
 
@@ -2346,28 +2391,69 @@ export default function Home() {
     }
 
     try {
-      console.log("Prompting Google Sign-In");
-      window.google.accounts.id.prompt((notification) => {
-        if (notification.isNotDisplayed()) {
-          console.error("Google Sign-In prompt not displayed:", notification);
-          // Try alternative sign-in method if One Tap fails
-          const client = window.google.accounts.oauth2.initTokenClient({
-            client_id: GOOGLE_CLIENT_ID,
-            scope: 'https://www.googleapis.com/auth/calendar',
-            callback: handleGoogleSignIn,
-          });
-          client.requestAccessToken({ prompt: 'consent' });
-        } else if (notification.isSkippedMoment()) {
-          console.log("Google Sign-In prompt skipped");
-          setAuthError("Sign-In prompt was skipped. Please try again.");
-        } else if (notification.isDismissedMoment()) {
-          console.log("Google Sign-In prompt dismissed");
-          setAuthError("Sign-In prompt was dismissed. Please try again.");
+      console.log("Prompting Google Sign-In (FedCM-compliant)");
+      window.google.accounts.id.prompt((moment) => {
+        let momentType = null;
+        if (typeof moment.getMomentType === 'function') {
+          momentType = moment.getMomentType();
+        }
+        // FedCM-compliant handling
+        switch (momentType) {
+          case 'display':
+            console.log("Google One Tap is displayed");
+            break;
+          case 'skipped':
+            console.log("Google One Tap was skipped, falling back to OAuth2");
+            fallbackToOAuth2();
+            break;
+          case 'dismissed':
+            console.log("Google One Tap was dismissed, falling back to OAuth2");
+            fallbackToOAuth2();
+            break;
+          default:
+            // For older browsers or unknown cases
+            if (moment.isNotDisplayed && moment.isNotDisplayed()) {
+              console.log("Google One Tap not displayed (legacy), falling back to OAuth2");
+              fallbackToOAuth2();
+            } else if (moment.isSkippedMoment && moment.isSkippedMoment()) {
+              console.log("Google One Tap skipped (legacy), falling back to OAuth2");
+              fallbackToOAuth2();
+            } else if (moment.isDismissedMoment && moment.isDismissedMoment()) {
+              console.log("Google One Tap dismissed (legacy), falling back to OAuth2");
+              fallbackToOAuth2();
+            } else {
+              // If we can't determine, always offer fallback
+              setAuthError("Google Sign-In prompt could not be displayed. Please use the manual sign-in option.");
+              fallbackToOAuth2();
+            }
         }
       });
     } catch (error) {
       console.error("Error showing Google Sign-In prompt:", error);
       setAuthError("Failed to show Google Sign-In prompt. Please try again.");
+      fallbackToOAuth2();
+    }
+  }
+
+  // Helper for OAuth2 fallback
+  const fallbackToOAuth2 = () => {
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/calendar',
+        callback: (response) => {
+          if (response.error) {
+            console.error("OAuth2 error:", response.error);
+            setAuthError("Failed to sign in. Please try again.");
+            return;
+          }
+          handleGoogleSignIn(response);
+        },
+      });
+      client.requestAccessToken({ prompt: 'consent' });
+    } catch (error) {
+      console.error("Error in OAuth2 fallback:", error);
+      setAuthError("Failed to show Google OAuth2 sign-in. Please try again.");
     }
   }
 
