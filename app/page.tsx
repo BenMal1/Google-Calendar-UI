@@ -532,8 +532,8 @@ export default function Home() {
           callback: handleGoogleSignIn,
           auto_select: false,
           cancel_on_tap_outside: false,
-          context: 'signin', // Add context for FedCM
-          use_fedcm_for_prompt: true, // Opt-in to FedCM
+          context: 'signin',
+          use_fedcm_for_prompt: true,
         });
 
         // Check for existing session
@@ -565,42 +565,56 @@ export default function Home() {
 
   const handleGoogleSignIn = async (response: any) => {
     try {
-      const credential = response.credential
-      const payload = JSON.parse(atob(credential.split(".")[1]))
+      console.log("Handling Google Sign-In response:", response);
+      
+      if (!response || !response.credential) {
+        console.error("Invalid response from Google Sign-In");
+        setAuthError("Invalid response from Google Sign-In. Please try again.");
+        return;
+      }
 
-      // Request additional scopes for Calendar API
+      // Decode the JWT token
+      const decodedToken = JSON.parse(atob(response.credential.split('.')[1]));
+      console.log("Decoded token:", decodedToken);
+
+      // Get access token for Google Calendar API
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
-        scope: "https://www.googleapis.com/auth/calendar",
-        callback: (tokenResponse: { access_token?: string }) => {
-          if (tokenResponse && tokenResponse.access_token) {
-            const userData: GoogleUser = {
-              id: payload.sub,
-              name: payload.name,
-              email: payload.email,
-              picture: payload.picture,
-              given_name: payload.given_name,
-              family_name: payload.family_name,
-              accessToken: tokenResponse.access_token,
-            }
-
-            setUser(userData)
-            localStorage.setItem("calendar_user", JSON.stringify(userData))
-            setShowUserMenu(false)
-            setAuthError(null)
-            setSyncStatus("syncing")
-
-            // Fetch calendars and events with the access token - force sync on sign-in
-            fetchGoogleCalendars(tokenResponse.access_token, true)
+        scope: 'https://www.googleapis.com/auth/calendar',
+        callback: async (tokenResponse: any) => {
+          if (tokenResponse.error) {
+            console.error("Error getting access token:", tokenResponse.error);
+            setAuthError("Failed to get calendar access. Please try again.");
+            return;
           }
-        },
-      })
 
-      tokenClient.requestAccessToken({ prompt: "consent" })
+          const accessToken = tokenResponse.access_token;
+          console.log("Got access token");
+
+          // Create user object
+          const user: GoogleUser = {
+            id: decodedToken.sub,
+            name: decodedToken.name,
+            email: decodedToken.email,
+            picture: decodedToken.picture,
+            given_name: decodedToken.given_name,
+            family_name: decodedToken.family_name,
+            accessToken: accessToken,
+          };
+
+          // Save user to state and localStorage
+          setUser(user);
+          localStorage.setItem("calendar_user", JSON.stringify(user));
+
+          // Fetch calendars and events
+          await fetchGoogleCalendars(accessToken);
+        },
+      });
+
+      tokenClient.requestAccessToken({ prompt: 'consent' });
     } catch (error) {
-      console.error("Error handling Google sign in:", error)
-      setAuthError("Failed to sign in with Google. Please try again.")
-      setSyncStatus("error")
+      console.error("Error handling Google sign in:", error);
+      setAuthError("Failed to sign in. Please try again.");
     }
   }
 
