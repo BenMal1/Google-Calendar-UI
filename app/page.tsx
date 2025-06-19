@@ -540,7 +540,6 @@ export default function Home() {
           auto_select: false,
           cancel_on_tap_outside: false,
           context: 'signin',
-          use_fedcm_for_prompt: true,
         });
 
         // Check for existing session
@@ -2458,57 +2457,19 @@ export default function Home() {
 
   const promptGoogleSignIn = () => {
     if (typeof window === "undefined") return;
-    
     if (!window.google) {
       console.error("Google API not loaded");
       setAuthError("Google Sign-In is not ready. Please try again in a moment.");
       return;
     }
-
     if (!GOOGLE_CLIENT_ID) {
       console.error("Google Client ID is missing");
       setAuthError("Google Sign-In is not properly configured. Please check your environment variables.");
       return;
     }
-
     try {
-      console.log("Prompting Google Sign-In (FedCM-compliant)");
-      window.google.accounts.id.prompt((moment) => {
-        let momentType = null;
-        if (typeof moment.getMomentType === 'function') {
-          momentType = moment.getMomentType();
-        }
-        // FedCM-compliant handling
-        switch (momentType) {
-          case 'display':
-            console.log("Google One Tap is displayed");
-            break;
-          case 'skipped':
-            console.log("Google One Tap was skipped, falling back to OAuth2");
-            fallbackToOAuth2();
-            break;
-          case 'dismissed':
-            console.log("Google One Tap was dismissed, falling back to OAuth2");
-            fallbackToOAuth2();
-            break;
-          default:
-            // For older browsers or unknown cases
-            if (moment.isNotDisplayed && moment.isNotDisplayed()) {
-              console.log("Google One Tap not displayed (legacy), falling back to OAuth2");
-              fallbackToOAuth2();
-            } else if (moment.isSkippedMoment && moment.isSkippedMoment()) {
-              console.log("Google One Tap skipped (legacy), falling back to OAuth2");
-              fallbackToOAuth2();
-            } else if (moment.isDismissedMoment && moment.isDismissedMoment()) {
-              console.log("Google One Tap dismissed (legacy), falling back to OAuth2");
-              fallbackToOAuth2();
-            } else {
-              // If we can't determine, always offer fallback
-              setAuthError("Google Sign-In prompt could not be displayed. Please use the manual sign-in option.");
-              fallbackToOAuth2();
-            }
-        }
-      });
+      // Only use OAuth2 fallback
+      fallbackToOAuth2();
     } catch (error) {
       console.error("Error showing Google Sign-In prompt:", error);
       setAuthError("Failed to show Google Sign-In prompt. Please try again.");
