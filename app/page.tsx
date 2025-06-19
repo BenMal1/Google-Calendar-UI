@@ -584,6 +584,8 @@ export default function Home() {
       }
 
       let userData;
+      let accessToken;
+
       if (response.credential) {
         // One Tap response
         console.log("Processing One Tap response...");
@@ -597,32 +599,27 @@ export default function Home() {
           given_name: decodedToken.given_name,
           family_name: decodedToken.family_name,
         };
-      } else {
-        // OAuth2 response
-        console.log("Processing OAuth2 response...");
+        
+        // For One Tap flow, we need to get calendar access separately
+        console.log("One Tap flow - getting calendar access...");
         const tokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: GOOGLE_CLIENT_ID,
           scope: 'https://www.googleapis.com/auth/calendar',
           callback: async (tokenResponse: any) => {
-            console.log("Token client callback received:", tokenResponse);
+            console.log("One Tap token client callback received:", tokenResponse);
             if (tokenResponse.error) {
               console.error("Error getting access token:", tokenResponse.error);
               setAuthError("Failed to get calendar access. Please try again.");
               return;
             }
 
-            const accessToken = tokenResponse.access_token;
-            console.log("Got access token, creating user object...");
+            const calendarAccessToken = tokenResponse.access_token;
+            console.log("Got access token for One Tap flow");
 
-            // Create user object
+            // Create user object with access token
             const user: GoogleUser = {
-              id: response.id,
-              name: response.name,
-              email: response.email,
-              picture: response.picture,
-              given_name: response.given_name,
-              family_name: response.family_name,
-              accessToken: accessToken,
+              ...userData,
+              accessToken: calendarAccessToken,
             };
 
             console.log("Saving user to state and localStorage...");
@@ -630,51 +627,72 @@ export default function Home() {
             setUser(user);
             localStorage.setItem("calendar_user", JSON.stringify(user));
 
-            console.log("Starting calendar sync...");
+            console.log("Starting calendar sync for One Tap flow...");
             // Fetch calendars and events
-            await fetchGoogleCalendars(accessToken);
+            await fetchGoogleCalendars(calendarAccessToken);
           },
         });
 
+        console.log("Requesting access token for One Tap flow...");
         tokenClient.requestAccessToken({ prompt: 'consent' });
         return;
-      }
-
-      // For One Tap flow, get calendar access
-      console.log("One Tap flow - getting calendar access...");
-      const tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/calendar',
-        callback: async (tokenResponse: any) => {
-          console.log("One Tap token client callback received:", tokenResponse);
-          if (tokenResponse.error) {
-            console.error("Error getting access token:", tokenResponse.error);
-            setAuthError("Failed to get calendar access. Please try again.");
-            return;
+      } else {
+        // OAuth2 response - we already have the access token
+        console.log("Processing OAuth2 response...");
+        accessToken = response.access_token;
+        
+        // For OAuth2, we need to get user info from the token
+        try {
+          console.log("Getting user info from access token...");
+          const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+          
+          if (!userInfoResponse.ok) {
+            throw new Error('Failed to get user info');
           }
-
-          const accessToken = tokenResponse.access_token;
-          console.log("Got access token for One Tap flow");
-
-          // Create user object with access token
-          const user: GoogleUser = {
-            ...userData,
-            accessToken: accessToken,
+          
+          const userInfo = await userInfoResponse.json();
+          console.log("User info received:", userInfo);
+          
+          userData = {
+            id: userInfo.id,
+            name: userInfo.name,
+            email: userInfo.email,
+            picture: userInfo.picture,
+            given_name: userInfo.given_name,
+            family_name: userInfo.family_name,
           };
+        } catch (error) {
+          console.error("Error getting user info:", error);
+          // Fallback: create minimal user data
+          userData = {
+            id: 'unknown',
+            name: 'Google User',
+            email: 'user@example.com',
+            picture: '',
+            given_name: '',
+            family_name: '',
+          };
+        }
 
-          console.log("Saving user to state and localStorage...");
-          // Save user to state and localStorage
-          setUser(user);
-          localStorage.setItem("calendar_user", JSON.stringify(user));
+        // Create user object with access token
+        const user: GoogleUser = {
+          ...userData,
+          accessToken: accessToken,
+        };
 
-          console.log("Starting calendar sync for One Tap flow...");
-          // Fetch calendars and events
-          await fetchGoogleCalendars(accessToken);
-        },
-      });
+        console.log("Saving user to state and localStorage...");
+        // Save user to state and localStorage
+        setUser(user);
+        localStorage.setItem("calendar_user", JSON.stringify(user));
 
-      console.log("Requesting access token for One Tap flow...");
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+        console.log("Starting calendar sync for OAuth2 flow...");
+        // Fetch calendars and events
+        await fetchGoogleCalendars(accessToken);
+      }
     } catch (error) {
       console.error("Error handling Google sign in:", error);
       setAuthError("Failed to sign in. Please try again.");
@@ -1491,8 +1509,9 @@ export default function Home() {
     return { top: `${top}px`, height: `${height}px` }
   }
 
-  // Calculate current time line position
+  // Calculate current time line position - only on client side
   const getCurrentTimeLinePosition = () => {
+    if (typeof window === 'undefined') return 0; // Return 0 on server
     const now = currentTime
     const hours = now.getHours()
     const minutes = now.getMinutes()
@@ -1793,7 +1812,6 @@ export default function Home() {
     const timedEvents = dayEvents.filter((event) => !event.isAllDay)
     const slotHeight = getSlotHeight()
     const showTimeLine = shouldShowCurrentTimeLine()
-    const timeLinePosition = getCurrentTimeLinePosition()
 
     return (
       <div 
@@ -2110,7 +2128,6 @@ export default function Home() {
                 {Array.from({ length: 7 }).map((_, dayIndex) => {
                   const dayDate = weekDates[dayIndex]
                   const showTimeLine = shouldShowCurrentTimeLine(dayDate)
-                  const timeLinePosition = getCurrentTimeLinePosition()
 
                   return (
                     <div key={dayIndex} className="relative overflow-hidden">
@@ -2134,10 +2151,10 @@ export default function Home() {
                       ))}
 
                       {/* Current Time Line - Only for current day */}
-                      {showTimeLine && (
+                      {showTimeLine && isClient && clientTimeLinePosition !== null && (
                         <div
                           className="absolute left-0 right-0 z-30 pointer-events-none"
-                          style={{ top: `${timeLinePosition}px` }}
+                          style={{ top: `${clientTimeLinePosition}px` }}
                         >
                           <div className="flex items-center">
                             <div className="w-2 h-2 bg-orange-500 rounded-full shadow-lg"></div>
