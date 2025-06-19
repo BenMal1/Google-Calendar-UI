@@ -524,6 +524,13 @@ export default function Home() {
       return;
     }
 
+    // Log current origin for debugging
+    console.log("Current origin:", window.location.origin);
+    console.log("Current hostname:", window.location.hostname);
+    console.log("Current protocol:", window.location.protocol);
+    console.log("Current port:", window.location.port);
+    console.log("Full URL:", window.location.href);
+
     if (window.google && googleScriptLoaded) {
       try {
         console.log("Initializing Google Auth with client ID:", GOOGLE_CLIENT_ID);
@@ -4156,21 +4163,6 @@ export default function Home() {
                       ))}
                     </select>
                   </div>
-
-                  {/* Manual Google Sign-In Button (only if not signed in and Google Auth is enabled) */}
-                  {isGoogleAuthEnabled && !user && (
-                    <div className="pt-2">
-                      <button
-                        onClick={fallbackToOAuth2}
-                        className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-md"
-                      >
-                        Sign in with Google (Manual)
-                      </button>
-                      <div className="text-xs text-white/70 mt-2">
-                        If you don't see the Google One Tap prompt, use this button to sign in manually.
-                      </div>
-                    </div>
-                  )}
 
                   {/* Formatting Section */}
                   <div className="space-y-4">
