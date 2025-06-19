@@ -572,6 +572,7 @@ export default function Home() {
 
   const handleGoogleSignIn = async (response: any) => {
     try {
+      console.log("=== Google Sign-In Process Started ===");
       console.log("Handling Google Sign-In response:", response);
       
       // Handle both One Tap and OAuth2 responses
@@ -585,6 +586,7 @@ export default function Home() {
       let userData;
       if (response.credential) {
         // One Tap response
+        console.log("Processing One Tap response...");
         const decodedToken = JSON.parse(atob(response.credential.split('.')[1]));
         console.log("Decoded token:", decodedToken);
         userData = {
@@ -597,10 +599,12 @@ export default function Home() {
         };
       } else {
         // OAuth2 response
+        console.log("Processing OAuth2 response...");
         const tokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: GOOGLE_CLIENT_ID,
           scope: 'https://www.googleapis.com/auth/calendar',
           callback: async (tokenResponse: any) => {
+            console.log("Token client callback received:", tokenResponse);
             if (tokenResponse.error) {
               console.error("Error getting access token:", tokenResponse.error);
               setAuthError("Failed to get calendar access. Please try again.");
@@ -608,7 +612,7 @@ export default function Home() {
             }
 
             const accessToken = tokenResponse.access_token;
-            console.log("Got access token");
+            console.log("Got access token, creating user object...");
 
             // Create user object
             const user: GoogleUser = {
@@ -621,10 +625,12 @@ export default function Home() {
               accessToken: accessToken,
             };
 
+            console.log("Saving user to state and localStorage...");
             // Save user to state and localStorage
             setUser(user);
             localStorage.setItem("calendar_user", JSON.stringify(user));
 
+            console.log("Starting calendar sync...");
             // Fetch calendars and events
             await fetchGoogleCalendars(accessToken);
           },
@@ -635,10 +641,12 @@ export default function Home() {
       }
 
       // For One Tap flow, get calendar access
+      console.log("One Tap flow - getting calendar access...");
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'https://www.googleapis.com/auth/calendar',
         callback: async (tokenResponse: any) => {
+          console.log("One Tap token client callback received:", tokenResponse);
           if (tokenResponse.error) {
             console.error("Error getting access token:", tokenResponse.error);
             setAuthError("Failed to get calendar access. Please try again.");
@@ -646,7 +654,7 @@ export default function Home() {
           }
 
           const accessToken = tokenResponse.access_token;
-          console.log("Got access token");
+          console.log("Got access token for One Tap flow");
 
           // Create user object with access token
           const user: GoogleUser = {
@@ -654,15 +662,18 @@ export default function Home() {
             accessToken: accessToken,
           };
 
+          console.log("Saving user to state and localStorage...");
           // Save user to state and localStorage
           setUser(user);
           localStorage.setItem("calendar_user", JSON.stringify(user));
 
+          console.log("Starting calendar sync for One Tap flow...");
           // Fetch calendars and events
           await fetchGoogleCalendars(accessToken);
         },
       });
 
+      console.log("Requesting access token for One Tap flow...");
       tokenClient.requestAccessToken({ prompt: 'consent' });
     } catch (error) {
       console.error("Error handling Google sign in:", error);
@@ -672,7 +683,12 @@ export default function Home() {
 
   // Replace the existing fetchGoogleCalendars function with this enhanced version
   const fetchGoogleCalendars = async (accessToken: string, forceSync = false) => {
+    console.log("=== fetchGoogleCalendars started ===");
+    console.log("Access token available:", !!accessToken);
+    console.log("Force sync:", forceSync);
+    
     if (!accessToken) {
+      console.error("No access token available");
       setSyncError("No access token available. Please sign in again.")
       setSyncStatus("error")
       return
@@ -691,17 +707,22 @@ export default function Home() {
     setSyncError(null)
 
     try {
+      console.log("Fetching calendar list from Google API...");
       const response = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
       })
 
+      console.log("Calendar list response status:", response.status);
       if (!response.ok) {
         throw new Error(`Failed to fetch calendars: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
+      console.log("Calendar list data:", data);
+      console.log("Number of calendars found:", data.items?.length || 0);
+      
       const calendars = data.items.map((cal: any) => ({
         id: cal.id,
         summary: cal.summary,
@@ -715,17 +736,22 @@ export default function Home() {
         colorId: cal.colorId,
       }))
 
+      console.log("Processed calendars:", calendars);
+      console.log("Visible calendars:", calendars.filter((cal: GoogleCalendar) => cal.visible));
+      
       setGoogleCalendars(calendars)
 
       // Fetch events for visible calendars
+      console.log("Starting to fetch events for visible calendars...");
       await fetchGoogleCalendarEvents(
         accessToken,
-        calendars.filter((cal) => cal.visible),
+        calendars.filter((cal: GoogleCalendar) => cal.visible),
         forceSync,
       )
 
       setSyncStatus("synced")
       setHasUnsyncedChanges(false)
+      console.log("=== fetchGoogleCalendars completed successfully ===");
     } catch (error) {
       console.error("Error fetching Google Calendars:", error)
       setSyncError("Failed to fetch your Google Calendars. Please try again.")
@@ -739,7 +765,13 @@ export default function Home() {
     calendarsToFetch?: GoogleCalendar[],
     forceSync = false,
   ) => {
+    console.log("=== fetchGoogleCalendarEvents started ===");
+    console.log("Access token available:", !!accessToken);
+    console.log("Calendars to fetch:", calendarsToFetch?.length || 0);
+    console.log("Force sync:", forceSync);
+    
     if (!accessToken) {
+      console.error("No access token available for events");
       setSyncError("No access token available. Please sign in again.")
       setSyncStatus("error")
       return
@@ -750,6 +782,8 @@ export default function Home() {
 
     try {
       const calendarsToSync = calendarsToFetch || googleCalendars.filter((cal) => cal.visible)
+      console.log("Calendars to sync:", calendarsToSync.length);
+      console.log("Calendar details:", calendarsToSync);
 
       // Calculate date range for events (1 month before and after current date)
       const startDate = new Date(currentDate)
@@ -760,12 +794,15 @@ export default function Home() {
 
       const timeMin = startDate.toISOString()
       const timeMax = endDate.toISOString()
+      
+      console.log("Date range for events:", { timeMin, timeMax });
 
       const allEvents: GoogleCalendarEvent[] = []
 
       // Fetch events from each visible calendar
       for (const calendar of calendarsToSync) {
         try {
+          console.log(`Fetching events for calendar: ${calendar.summary} (${calendar.id})`);
           const response = await fetch(
             `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
             {
@@ -775,32 +812,42 @@ export default function Home() {
             },
           )
 
+          console.log(`Response for ${calendar.summary}:`, response.status);
           if (response.ok) {
             const data = await response.json()
+            console.log(`Events for ${calendar.summary}:`, data.items?.length || 0);
             const calendarEvents = data.items.map((event: any) => ({
               ...event,
               calendarId: calendar.id,
               calendarColor: calendar.backgroundColor,
             }))
             allEvents.push(...calendarEvents)
+          } else {
+            console.error(`Failed to fetch events for ${calendar.summary}:`, response.status, response.statusText);
           }
         } catch (error) {
           console.error(`Error fetching events for calendar ${calendar.summary}:`, error)
         }
       }
 
+      console.log("Total events fetched:", allEvents.length);
       setGoogleCalendarEvents(allEvents)
 
       // Convert Google Calendar events to our app's format and merge with local events
+      console.log("Converting Google events to app format...");
       const googleEvents = convertGoogleEvents(allEvents)
+      console.log("Converted events:", googleEvents.length);
 
       // Filter out local events (keep only those with source: "local")
       const localEvents = events.filter((event) => event.source === "local")
+      console.log("Local events to keep:", localEvents.length);
 
       // Merge local events with Google events
+      console.log("Merging events...");
       setEvents([...localEvents, ...googleEvents])
       setLastSyncTime(new Date())
       setSyncStatus("synced")
+      console.log("=== fetchGoogleCalendarEvents completed successfully ===");
     } catch (error) {
       console.error("Error fetching Google Calendar events:", error)
       setSyncError("Failed to fetch your Google Calendar events. Please try again.")
@@ -820,6 +867,11 @@ export default function Home() {
       let startDate, endDate, startTime, endTime
 
       if (isAllDay) {
+        // Handle undefined date values
+        if (!event.start.date || !event.end.date) {
+          console.warn("Missing date for all-day event:", event);
+          return null;
+        }
         startDate = new Date(event.start.date)
         endDate = new Date(event.end.date)
         // Subtract one day from end date because Google's end date is exclusive
@@ -827,6 +879,11 @@ export default function Home() {
         startTime = "00:00"
         endTime = "23:59"
       } else {
+        // Handle undefined dateTime values
+        if (!event.start.dateTime || !event.end.dateTime) {
+          console.warn("Missing dateTime for timed event:", event);
+          return null;
+        }
         startDate = new Date(event.start.dateTime)
         endDate = new Date(event.end.dateTime)
         startTime = `${startDate.getHours().toString().padStart(2, "0")}:${startDate.getMinutes().toString().padStart(2, "0")}`
@@ -848,7 +905,7 @@ export default function Home() {
 
       // Map Google color ID to our color scheme as fallback
       if (!exactColor && event.colorId) {
-        const colorMapping = {
+        const colorMapping: { [key: string]: string } = {
           "1": "bg-blue-600", // Blue
           "2": "bg-green-600", // Green
           "3": "bg-purple-600", // Purple
@@ -889,14 +946,14 @@ export default function Home() {
         endDay: endDate.getDate(),
         endMonth: endDate.getMonth(),
         endYear: endDate.getFullYear(),
-        source: "google",
+        source: "google" as const,
         googleId: event.id,
         calendarId: event.calendarId,
         calendarName: calendar?.summary || "Unknown Calendar",
         recurringEventId: event.recurringEventId,
         isRecurring,
       }
-    })
+    }).filter(Boolean) as CalendarEvent[] // Filter out null values and ensure type
   }
 
   // Helper function to convert recurrence to Google Calendar format
@@ -2445,18 +2502,22 @@ export default function Home() {
   // Helper for OAuth2 fallback
   const fallbackToOAuth2 = () => {
     try {
+      console.log("Starting OAuth2 fallback...");
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'https://www.googleapis.com/auth/calendar',
         callback: (response) => {
+          console.log("OAuth2 callback received:", response);
           if (response.error) {
             console.error("OAuth2 error:", response.error);
             setAuthError("Failed to sign in. Please try again.");
             return;
           }
+          console.log("OAuth2 successful, calling handleGoogleSignIn...");
           handleGoogleSignIn(response);
         },
       });
+      console.log("Requesting OAuth2 access token...");
       client.requestAccessToken({ prompt: 'consent' });
     } catch (error) {
       console.error("Error in OAuth2 fallback:", error);
