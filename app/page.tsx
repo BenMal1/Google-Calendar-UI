@@ -27,6 +27,7 @@ import {
 import { useSettings } from "./contexts/SettingsContext"
 import { useEventDrag } from "./hooks/useEventDrag"
 import { AdvancedColorPicker } from "./components/AdvancedColorPicker"
+import { Collapsible } from "./components/Collapsible"
 
 // Google OAuth configuration - make it optional
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
@@ -3673,6 +3674,30 @@ export default function Home() {
                       </div>
                       <span className="ml-3 text-white text-sm">Multi-Day</span>
                     </label>
+
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newEvent.isRecurring}
+                        onChange={handleRecurringToggle}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`relative w-11 h-6 rounded-full transition-colors ${
+                          newEvent.isRecurring ? "bg-blue-500" : "bg-white/20"
+                        }`}
+                      >
+                        <div
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                            newEvent.isRecurring ? "translate-x-5" : ""
+                          }`}
+                        ></div>
+                      </div>
+                      <span className="ml-3 text-white text-sm flex items-center gap-1">
+                        <Repeat className="h-4 w-4" />
+                        Recurring
+                      </span>
+                    </label>
                   </div>
 
                   {/* Date and Time */}
@@ -3915,32 +3940,7 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Recurring Event Toggle */}
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={newEvent.isRecurring}
-                        onChange={handleRecurringToggle}
-                        className="sr-only"
-                      />
-                      <div
-                        className={`relative w-11 h-6 rounded-full transition-colors ${
-                          newEvent.isRecurring ? "bg-blue-500" : "bg-white/20"
-                        }`}
-                      >
-                        <div
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                            newEvent.isRecurring ? "translate-x-5" : ""
-                          }`}
-                        ></div>
-                      </div>
-                      <span className="ml-3 text-white text-sm flex items-center gap-1">
-                        <Repeat className="h-4 w-4" />
-                        Recurring Event
-                      </span>
-                    </label>
-                  </div>
+                  
 
                   {/* Recurrence Options */}
                   {newEvent.isRecurring && (
@@ -4251,34 +4251,48 @@ export default function Home() {
                     />
                   </div>
 
-                  {/* Color Selection */}
-                  <div>
-                    <label className="block text-white text-sm font-medium mb-2">Color</label>
-                    <AdvancedColorPicker
-                      currentColor={newEvent.exactColor || '#3B82F6'} // Always pass hex color
-                      onChange={(color) => {
-                        // The color picker always returns hex colors
-                        if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
-                          // Find the matching Tailwind class for this hex color
-                          const colorMap: { [key: string]: string } = {
-                            '#3B82F6': 'bg-blue-600',
-                            '#10B981': 'bg-green-600',
-                            '#8B5CF6': 'bg-purple-600',
-                            '#EF4444': 'bg-red-600',
-                            '#F59E0B': 'bg-yellow-600',
-                            '#EC4899': 'bg-pink-600',
-                            '#06B6D4': 'bg-cyan-600',
-                            '#84CC16': 'bg-lime-600',
-                            '#F97316': 'bg-orange-600',
-                            '#6366F1': 'bg-indigo-600',
-                          };
-                          const tailwindClass = colorMap[color] || 'bg-blue-600';
-                          setNewEvent({ ...newEvent, color: tailwindClass, exactColor: color });
+                  {/* Color Selection - More Compact */}
+                  <div className="flex items-center gap-4">
+                    <label className="text-white text-sm font-medium">Color:</label>
+                    <div className="flex-1 max-w-xs">
+                      <Collapsible
+                        header={
+                          <>
+                            <div 
+                              className="w-6 h-6 rounded-full border-2 border-white/20"
+                              style={{ backgroundColor: newEvent.exactColor || '#3B82F6' }}
+                            />
+                            <span className="text-white text-sm">Select Color</span>
+                          </>
                         }
-                      }}
-                      onRecentColorAdd={addRecentColor}
-                      recentColors={settings?.recentColors || []}
-                    />
+                      >
+                        <AdvancedColorPicker
+                          currentColor={newEvent.exactColor || '#3B82F6'} // Always pass hex color
+                          onChange={(color) => {
+                            // The color picker always returns hex colors
+                            if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                              // Find the matching Tailwind class for this hex color
+                              const colorMap: { [key: string]: string } = {
+                                '#3B82F6': 'bg-blue-600',
+                                '#10B981': 'bg-green-600',
+                                '#8B5CF6': 'bg-purple-600',
+                                '#EF4444': 'bg-red-600',
+                                '#F59E0B': 'bg-yellow-600',
+                                '#EC4899': 'bg-pink-600',
+                                '#06B6D4': 'bg-cyan-600',
+                                '#84CC16': 'bg-lime-600',
+                                '#F97316': 'bg-orange-600',
+                                '#6366F1': 'bg-indigo-600',
+                              };
+                              const tailwindClass = colorMap[color] || 'bg-blue-600';
+                              setNewEvent({ ...newEvent, color: tailwindClass, exactColor: color });
+                            }
+                          }}
+                          onRecentColorAdd={addRecentColor}
+                          recentColors={settings?.recentColors || []}
+                        />
+                      </Collapsible>
+                    </div>
                   </div>
 
                   {/* Action Buttons */}
