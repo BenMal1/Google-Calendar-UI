@@ -1,7 +1,6 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react"
-import { useDebounce } from "../hooks/useDebounce"
 
 // Define the user settings interface to match the API
 interface UserSettings {
@@ -88,27 +87,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Update settings with debouncing
-  const debouncedUpdateSettings = useDebounce(async (googleId: string, updates: Partial<UserSettings>) => {
-    try {
-      const updatedSettings = { ...settings, ...updates, lastUpdated: new Date().toISOString() }
-      
-      const response = await fetch("/api/user-settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ googleId, settings: updatedSettings }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setSettings(data)
-      }
-    } catch (error) {
-      console.error("Error saving settings:", error)
-    }
-  }, 500)
-
-  // Update settings function
+  // Update settings function (simplified without debouncing)
   const updateSettings = useCallback((updates: Partial<UserSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }))
     
@@ -116,8 +95,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const savedUser = localStorage.getItem("calendar_user")
     const googleId = savedUser ? JSON.parse(savedUser).id : "default"
     
-    debouncedUpdateSettings(googleId, updates)
-  }, [debouncedUpdateSettings])
+    // Save settings immediately (no debouncing for now)
+    const updatedSettings = { ...settings, ...updates, lastUpdated: new Date().toISOString() }
+    
+    fetch("/api/user-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ googleId, settings: updatedSettings }),
+    }).catch(error => {
+      console.error("Error saving settings:", error)
+    })
+  }, [settings])
 
   // Add recent color function
   const addRecentColor = useCallback((color: string) => {
@@ -130,8 +118,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const savedUser = localStorage.getItem("calendar_user")
     const googleId = savedUser ? JSON.parse(savedUser).id : "default"
     
-    debouncedUpdateSettings(googleId, { recentColors: [color, ...settings.recentColors.filter(c => c !== color)].slice(0, 8) })
-  }, [settings.recentColors, debouncedUpdateSettings])
+    const updatedSettings = { 
+      ...settings, 
+      recentColors: [color, ...settings.recentColors.filter(c => c !== color)].slice(0, 8) 
+    }
+    
+    fetch("/api/user-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ googleId, settings: updatedSettings }),
+    }).catch(error => {
+      console.error("Error saving settings:", error)
+    })
+  }, [settings.recentColors])
 
   // Memoize the context value to prevent unnecessary re-renders
   const value = useMemo(() => ({

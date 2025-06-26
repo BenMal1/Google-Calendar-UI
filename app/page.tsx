@@ -994,6 +994,22 @@ export default function Home() {
     }).filter(Boolean) as CalendarEvent[] // Filter out null values and ensure type
   }
 
+  // Helper function to get singular form of frequency
+  const getFrequencySingular = (frequency: string): string => {
+    switch (frequency) {
+      case "daily":
+        return "day"
+      case "weekly":
+        return "week"
+      case "monthly":
+        return "month"
+      case "yearly":
+        return "year"
+      default:
+        return frequency
+    }
+  }
+
   // Helper function to convert recurrence to Google Calendar format
   const convertRecurrenceToGoogle = (recurrence) => {
     if (!recurrence) return []
@@ -3988,7 +4004,7 @@ export default function Home() {
                           >
                             {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
                               <option key={num} value={num} className="bg-gray-800">
-                                Every {num} {newEvent.recurrence.frequency.slice(0, -2)}
+                                Every {num} {getFrequencySingular(newEvent.recurrence.frequency)}
                                 {num > 1 ? "s" : ""}
                               </option>
                             ))}
@@ -4246,7 +4262,7 @@ export default function Home() {
                     <textarea
                       value={newEvent.description}
                       onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
-                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none"
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500 h-10 resize-none"
                       placeholder="Enter event description"
                     />
                   </div>
