@@ -2800,6 +2800,13 @@ export default function Home() {
     }
   }, [showEndTimeDropdown]);
 
+  // Ensure isAuthLoading is false if Google Auth is not enabled
+  useEffect(() => {
+    if (!isGoogleAuthEnabled) {
+      setIsAuthLoading(false);
+    }
+  }, []);
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
       {/* Background Image with dynamic blur effect */}
@@ -4511,12 +4518,12 @@ export default function Home() {
 
         {/* User Profile / Login */}
         <div className="relative z-[100]" ref={userMenuRef}>
-          {isAuthLoading ? (
-            <div className="h-10 w-10 rounded-full bg-gray-400 animate-pulse"></div>
-          ) : user ? (
+          {user ? (
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="h-10 w-10 rounded-full overflow-hidden border-2 border-white/20 hover:border-white/40 transition-colors"
+              tabIndex={0}
+              aria-label="Open user menu"
             >
               <Image
                 src={user.picture || "/placeholder.svg"}
@@ -4527,19 +4534,36 @@ export default function Home() {
               />
             </button>
           ) : (
-            <button
-              onClick={promptGoogleSignIn}
-              className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold shadow-md hover:bg-blue-600 transition-colors"
-              title={
-                authError
-                  ? "Google Sign-In not available"
-                  : isGoogleAuthEnabled
+            <div className="relative">
+              <button
+                onClick={() => {
+                  if (!isGoogleAuthEnabled) {
+                    setAuthError("Google Sign-In is not configured. Please set NEXT_PUBLIC_GOOGLE_CLIENT_ID in your environment.");
+                    return;
+                  }
+                  promptGoogleSignIn();
+                }}
+                className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold shadow-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
+                tabIndex={0}
+                aria-label={
+                  isGoogleAuthEnabled
                     ? "Sign in with Google"
                     : "Google Sign-In not configured"
-              }
-            >
-              <User className="h-5 w-5" />
-            </button>
+                }
+                title={
+                  isGoogleAuthEnabled
+                    ? "Sign in with Google"
+                    : "Google Sign-In not configured"
+                }
+              >
+                <User className="h-5 w-5" />
+              </button>
+              {isAuthLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-400 bg-opacity-60 rounded-full animate-pulse pointer-events-none">
+                  <span className="sr-only">Loading...</span>
+                </div>
+              )}
+            </div>
           )}
 
           {/* User Menu Dropdown */}
