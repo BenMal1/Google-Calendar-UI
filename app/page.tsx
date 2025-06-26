@@ -2660,6 +2660,9 @@ export default function Home() {
     setSelectedEvent(event)
   }
 
+  // At the top of the Home component
+  const hasInitializedGoogleAuth = useRef(false);
+
   useEffect(() => {
     // Only run on client side
     if (typeof window === 'undefined') return;
@@ -2677,8 +2680,11 @@ export default function Home() {
       
       script.onload = () => {
         setGoogleScriptLoaded(true);
-        // Initialize auth immediately after script loads
-        initializeGoogleAuth();
+        // Only initialize once after script loads
+        if (!hasInitializedGoogleAuth.current) {
+          initializeGoogleAuth();
+          hasInitializedGoogleAuth.current = true;
+        }
       };
       
       script.onerror = () => {
@@ -2692,8 +2698,10 @@ export default function Home() {
 
     if (isGoogleAuthEnabled && !googleScriptLoaded) {
       loadGoogleScript();
-    } else if (isGoogleAuthEnabled && googleScriptLoaded) {
+    } else if (isGoogleAuthEnabled && googleScriptLoaded && !hasInitializedGoogleAuth.current) {
+      // If script is already loaded (e.g., hot reload), initialize once
       initializeGoogleAuth();
+      hasInitializedGoogleAuth.current = true;
     }
 
     // Set initial timeline time
@@ -2705,14 +2713,15 @@ export default function Home() {
     return () => clearInterval(intervalId)
   }, [googleScriptLoaded])
 
-  // Separate useEffect for Google Auth initialization
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    if (googleScriptLoaded) {
-      initializeGoogleAuth()
-    }
-  }, [googleScriptLoaded, user])
+  // REMOVE this effect:
+  // useEffect(() => {
+  //   if (typeof window === 'undefined') return;
+  //   if (googleScriptLoaded) {
+  //     initializeGoogleAuth()
+  //   }
+  // }, [googleScriptLoaded, user])
+  //
+  // Now, initializeGoogleAuth is only called once after the script loads, preventing infinite re-renders.
 
   const handleRefreshCalendar = async () => {
     if (user?.accessToken) {
