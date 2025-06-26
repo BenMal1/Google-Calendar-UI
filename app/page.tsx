@@ -24,6 +24,9 @@ import {
   X,
   ChevronDown,
 } from "lucide-react"
+import { useSettings } from "./contexts/SettingsContext"
+import { useEventDrag } from "./hooks/useEventDrag"
+import { AdvancedColorPicker } from "./components/AdvancedColorPicker"
 
 // Google OAuth configuration - make it optional
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
@@ -141,7 +144,21 @@ declare global {
   }
 }
 
+// Add at the top, after imports:
+function isValidColor(color: string | undefined | null): boolean {
+  if (!color || typeof color !== 'string') return false;
+  // Accept hex (#RRGGBB), rgb(), or rgba()
+  return (
+    /^#[0-9A-Fa-f]{6}$/.test(color) ||
+    /^rgb\((\s*\d+\s*,){2}\s*\d+\s*\)$/.test(color) ||
+    /^rgba\((\s*\d+\s*,){3}\s*(0|1|0?\.\d+)\s*\)$/.test(color)
+  );
+}
+
 export default function Home() {
+  // Settings context
+  const { settings, updateSettings, loadSettings, addRecentColor } = useSettings()
+  
   const [isLoaded, setIsLoaded] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
@@ -149,15 +166,20 @@ export default function Home() {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [isEditMode, setIsEditMode] = useState(isGoogleAuthEnabled)
   const [editingEventId, setEditingEventId] = useState(null)
-  const [currentView, setCurrentView] = useState("week")
-  const [selectedTimeZone, setSelectedTimeZone] = useState("America/New_York")
-  const [compactness, setCompactness] = useState(50)
-  const [backgroundOpacity, setBackgroundOpacity] = useState(40)
-  const [backgroundBlur, setBackgroundBlur] = useState(0)
-  const [backgroundImage, setBackgroundImage] = useState("mountain")
-  const [customBackgroundUrl, setCustomBackgroundUrl] = useState("")
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [sidebarTab, setSidebarTab] = useState("calendar") // "calendar" or "calendars"
+  
+  // Use settings from context, fallback to defaults
+  const [currentView, setCurrentView] = useState(settings?.currentView || "week")
+  const [selectedTimeZone, setSelectedTimeZone] = useState(settings?.selectedTimeZone || "America/New_York")
+  const [compactness, setCompactness] = useState(settings?.compactness || 50)
+  const [backgroundOpacity, setBackgroundOpacity] = useState(settings?.backgroundOpacity || 40)
+  const [backgroundBlur, setBackgroundBlur] = useState(settings?.backgroundBlur || 0)
+  const [backgroundImage, setBackgroundImage] = useState(settings?.backgroundImage || "mountain")
+  const [customBackgroundUrl, setCustomBackgroundUrl] = useState(settings?.customBackgroundUrl || "")
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(settings?.sidebarCollapsed || false)
+  const [sidebarTab, setSidebarTab] = useState(settings?.sidebarTab || "calendar")
+  const [allDayEventDisplay, setAllDayEventDisplay] = useState(settings?.allDayEventDisplay || "full")
+  const [showTimeline, setShowTimeline] = useState(settings?.showTimeline || false)
+  const [selectedCalendarForNewEvents, setSelectedCalendarForNewEvents] = useState(settings?.selectedCalendarForNewEvents || "primary")
 
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState(null)
@@ -187,15 +209,12 @@ export default function Home() {
   const [syncDebounceTimeout, setSyncDebounceTimeout] = useState<NodeJS.Timeout | null>(null)
   const [hasUnsyncedChanges, setHasUnsyncedChanges] = useState<boolean>(false)
 
-  const [allDayEventDisplay, setAllDayEventDisplay] = useState<"full" | "compact">("full")
-
   // Initialize with current date
   const today = new Date()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [currentTime, setCurrentTime] = useState(new Date())
 
-  const [showTimeline, setShowTimeline] = useState(false)
   const [timelineCurrentTime, setTimelineCurrentTime] = useState(new Date())
 
   // At the top of the component
@@ -308,6 +327,7 @@ export default function Home() {
     description: "",
     location: "",
     color: "bg-blue-600",
+    exactColor: null as string | null,
     day: currentDateTime.day,
     month: currentDateTime.month,
     year: currentDateTime.year,
@@ -1164,8 +1184,6 @@ export default function Home() {
     }
   }
 
-  const [selectedCalendarForNewEvents, setSelectedCalendarForNewEvents] = useState("primary")
-
   // Handle recurring event confirmation
   const handleRecurringEventConfirm = async () => {
     if (!pendingEventUpdate) return
@@ -1205,7 +1223,7 @@ export default function Home() {
                 googleId: event.googleId,
                 calendarId: event.calendarId,
                 calendarName: event.calendarName,
-                exactColor: event.exactColor,
+                exactColor: newEvent.exactColor,
               }
             : event,
         ),
@@ -1310,7 +1328,7 @@ export default function Home() {
                     googleId: event.googleId,
                     calendarId: event.calendarId,
                     calendarName: event.calendarName,
-                    exactColor: event.exactColor,
+                    exactColor: newEvent.exactColor,
                   }
                 : event,
             ),
@@ -1346,7 +1364,7 @@ export default function Home() {
                     googleId: event.googleId,
                     calendarId: event.calendarId,
                     calendarName: event.calendarName,
-                    exactColor: event.exactColor,
+                    exactColor: newEvent.exactColor,
                   }
                 : event,
             ),
@@ -1369,6 +1387,7 @@ export default function Home() {
             attendees: [],
             organizer: user?.name || "You",
             source: "local",
+            exactColor: newEvent.exactColor || null,
           }
 
           // Generate recurring events if applicable
@@ -1839,7 +1858,7 @@ export default function Home() {
                         className={`${event.color} rounded-md p-3 text-white text-sm shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-1px] hover:shadow-lg ${
                           event.source === "google" ? "border-l-4 border-white" : ""
                         }`}
-                        style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
+                        style={isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}}
                         onClick={() => handleEventClick(event)}
                       >
                         <div className="flex items-center justify-between">
@@ -1865,7 +1884,7 @@ export default function Home() {
                       className={`${event.color} rounded-full px-3 py-1 text-white text-xs cursor-pointer hover:opacity-80 transition-opacity ${
                         event.source === "google" ? "border border-white/40" : ""
                       }`}
-                      style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
+                      style={isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}}
                       onClick={() => handleEventClick(event)}
                       title={`${event.title} (All Day)${event.location ? ` - ${event.location}` : ""}`}
                     >
@@ -1946,25 +1965,47 @@ export default function Home() {
               {/* Timed Events with Strict Column Containment */}
               {timedEvents.map((event, i) => {
                 const eventStyle = calculateEventStyleFn(event.startTime, event.endTime, timedEvents, event)
+                const isBeingDragged = dragState.isDragging && dragState.draggedEventId === event.id
+                const displayTime = isBeingDragged && dragState.newStartTime ? dragState.newStartTime : event.startTime
+                const displayEndTime = isBeingDragged && dragState.newStartTime ? 
+                  (() => {
+                    const startMinutes = parseInt(event.startTime.split(':')[0]) * 60 + parseInt(event.startTime.split(':')[1])
+                    const endMinutes = parseInt(event.endTime.split(':')[0]) * 60 + parseInt(event.endTime.split(':')[1])
+                    const duration = endMinutes - startMinutes
+                    const newStartMinutes = parseInt(dragState.newStartTime!.split(':')[0]) * 60 + parseInt(dragState.newStartTime!.split(':')[1])
+                    const newEndMinutes = newStartMinutes + duration
+                    return `${Math.floor(newEndMinutes / 60).toString().padStart(2, '0')}:${(newEndMinutes % 60).toString().padStart(2, '0')}`
+                  })() : event.endTime
+                
                 return (
                   <div
                     key={`${event.id}-${i}`}
-                    className={`absolute ${event.color} rounded-md p-2 text-white text-sm shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden ${
+                    className={`absolute rounded-md p-2 text-white text-sm shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden ${
                       event.source === "google" ? "border-l-4 border-white" : ""
-                    }`}
+                    } ${!isValidColor(event.exactColor) ? event.color : ""} ${isBeingDragged ? "opacity-50" : ""}`}
                     style={{
-                      top: eventStyle.top,
+                      top: isBeingDragged && dragState.newStartTime ? 
+                        (() => {
+                          const newStartMinutes = parseInt(dragState.newStartTime!.split(':')[0]) * 60 + parseInt(dragState.newStartTime!.split(':')[1])
+                          return `${newStartMinutes * (getSlotHeight() / 60)}px`
+                        })() : eventStyle.top,
                       height: eventStyle.height,
                       left: `calc(8px + ${eventStyle.left})`,
                       width: `calc(${eventStyle.width} - 16px)`,
                       maxWidth: `calc(100% - 16px)`,
-                      zIndex: eventStyle.zIndex,
+                      zIndex: isBeingDragged ? 100 : eventStyle.zIndex,
                       minWidth: "80px",
-                      ...(event.exactColor ? { backgroundColor: event.exactColor } : {}),
+                      ...(isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}),
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation()
+                      startDrag(event, e.clientY)
                     }}
                     onClick={(e) => {
-                      e.stopPropagation()
-                      handleEventClick(event)
+                      if (!dragState.isDragging) {
+                        e.stopPropagation()
+                        handleEventClick(event)
+                      }
                     }}
                   >
                     <div className="font-medium truncate text-xs flex items-center">
@@ -1974,7 +2015,7 @@ export default function Home() {
                       )}
                       {event.isRecurring && <Repeat className="inline h-2 w-2 ml-1" />}
                     </div>
-                    <div className="opacity-80 text-[10px] mt-1 truncate">{`${event.startTime} - ${event.endTime}`}</div>
+                    <div className="opacity-80 text-[10px] mt-1 truncate">{`${displayTime} - ${displayEndTime}`}</div>
                     {event.location && <div className="opacity-80 text-[10px] truncate">{event.location}</div>}
                   </div>
                 )
@@ -2039,7 +2080,7 @@ export default function Home() {
                               <div
                                 key={eventIndex}
                                 className={`w-2 h-2 rounded-full ${event.color} cursor-pointer relative`}
-                                style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
+                                style={isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   handleEventClick(event)
@@ -2060,7 +2101,7 @@ export default function Home() {
                               className={`${event.color} text-white text-xs p-1 rounded cursor-pointer hover:opacity-80 truncate ${
                                 event.source === "google" ? "border-l-2 border-white" : ""
                               }`}
-                              style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
+                              style={isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleEventClick(event)
@@ -2180,25 +2221,47 @@ export default function Home() {
                               e.year === weekDates[dayIndex].year,
                           )
                           const eventStyle = calculateEventStyleFn(event.startTime, event.endTime, dayEvents, event)
+                          const isBeingDragged = dragState.isDragging && dragState.draggedEventId === event.id
+                          const displayTime = isBeingDragged && dragState.newStartTime ? dragState.newStartTime : event.startTime
+                          const displayEndTime = isBeingDragged && dragState.newStartTime ? 
+                            (() => {
+                              const startMinutes = parseInt(event.startTime.split(':')[0]) * 60 + parseInt(event.startTime.split(':')[1])
+                              const endMinutes = parseInt(event.endTime.split(':')[0]) * 60 + parseInt(event.endTime.split(':')[1])
+                              const duration = endMinutes - startMinutes
+                              const newStartMinutes = parseInt(dragState.newStartTime!.split(':')[0]) * 60 + parseInt(dragState.newStartTime!.split(':')[1])
+                              const newEndMinutes = newStartMinutes + duration
+                              return `${Math.floor(newEndMinutes / 60).toString().padStart(2, '0')}:${(newEndMinutes % 60).toString().padStart(2, '0')}`
+                            })() : event.endTime
+                          
                           return (
                             <div
                               key={`${event.id}-${i}`}
-                              className={`absolute ${event.color} rounded-md p-1 text-white text-xs shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden ${
+                              className={`absolute rounded-md p-1 text-white text-xs shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden ${
                                 event.source === "google" ? "border-l-2 border-white" : ""
-                              }`}
+                              } ${!isValidColor(event.exactColor) ? event.color : ""} ${isBeingDragged ? "opacity-50" : ""}`}
                               style={{
-                                top: eventStyle.top,
+                                top: isBeingDragged && dragState.newStartTime ? 
+                                  (() => {
+                                    const newStartMinutes = parseInt(dragState.newStartTime!.split(':')[0]) * 60 + parseInt(dragState.newStartTime!.split(':')[1])
+                                    return `${newStartMinutes * (getSlotHeight() / 60)}px`
+                                  })() : eventStyle.top,
                                 height: eventStyle.height,
                                 left: `calc(4px + ${eventStyle.left})`,
                                 width: `calc(${eventStyle.width} - 8px)`,
                                 maxWidth: `calc(100% - 8px)`,
-                                zIndex: eventStyle.zIndex,
+                                zIndex: isBeingDragged ? 100 : eventStyle.zIndex,
                                 minWidth: "40px",
-                                ...(event.exactColor ? { backgroundColor: event.exactColor } : {}),
+                                ...(isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}),
+                              }}
+                              onMouseDown={(e) => {
+                                e.stopPropagation()
+                                startDrag(event, e.clientY)
                               }}
                               onClick={(e) => {
-                                e.stopPropagation()
-                                handleEventClick(event)
+                                if (!dragState.isDragging) {
+                                  e.stopPropagation()
+                                  handleEventClick(event)
+                                }
                               }}
                             >
                               <div className="font-medium truncate text-[10px] flex items-center">
@@ -2208,7 +2271,7 @@ export default function Home() {
                                 )}
                                 {event.isRecurring && <Repeat className="inline h-2 w-2 ml-1" />}
                               </div>
-                              <div className="opacity-80 text-[8px] mt-1 truncate">{`${event.startTime} - ${event.endTime}`}</div>
+                              <div className="opacity-80 text-[8px] mt-1 truncate">{`${displayTime} - ${displayEndTime}`}</div>
                             </div>
                           )
                         })}
@@ -2230,7 +2293,7 @@ export default function Home() {
                     return (
                       <div
                         key={`multi-${event.id}-${i}`}
-                        className={`absolute ${event.color} rounded-md p-1 text-white text-xs shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden border-2 border-white/30 ${
+                        className={`absolute rounded-md p-1 text-white text-xs shadow-md cursor-pointer transition-all duration-200 ease-in-out hover:translate-y-[-2px] hover:shadow-lg hover:z-50 overflow-hidden border-2 border-white/30 ${
                           event.source === "google" ? "border-l-4 border-white" : ""
                         }`}
                         style={{
@@ -2240,7 +2303,7 @@ export default function Home() {
                           width: `calc(${((endDayIndex - startDayIndex + 1) / 7) * 100}% - 8px)`,
                           zIndex: 25,
                           minWidth: "60px",
-                          ...(event.exactColor ? { backgroundColor: event.exactColor } : {}),
+                          ...(isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}),
                         }}
                         onClick={(e) => {
                           e.stopPropagation()
@@ -2328,7 +2391,7 @@ export default function Home() {
                                 <div
                                   key={eventIndex}
                                   className={`w-2 h-2 rounded-full ${event.color} cursor-pointer relative`}
-                                  style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
+                                  style={isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}}
                                   onClick={() => handleEventClick(event)}
                                   title={`${event.title} (All Day)`}
                                 >
@@ -2348,7 +2411,7 @@ export default function Home() {
                                 className={`${event.color} text-white text-xs p-1 rounded cursor-pointer hover:opacity-80 overflow-hidden ${
                                   event.source === "google" ? "border-l-2 border-white" : ""
                                 }`}
-                                style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
+                                style={isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}}
                                 onClick={() => handleEventClick(event)}
                               >
                                 <div className="truncate font-medium flex items-center">
@@ -2371,7 +2434,7 @@ export default function Home() {
                           className={`${event.color} text-white text-xs p-1 rounded cursor-pointer hover:opacity-80 overflow-hidden ${
                             event.source === "google" ? "border-l-2 border-white" : ""
                           }`}
-                          style={event.exactColor ? { backgroundColor: event.exactColor } : {}}
+                          style={isValidColor(event.exactColor) ? { backgroundColor: event.exactColor } : {}}
                           onClick={() => handleEventClick(event)}
                         >
                           <div className="truncate font-medium flex items-center">
@@ -2624,24 +2687,25 @@ export default function Home() {
 
   const handleEditEvent = () => {
     setIsEditMode(true)
-    setEditingEventId(selectedEvent.id) // Make sure this is the correct ID
+    setEditingEventId(selectedEvent?.id) // Make sure this is the correct ID
     setNewEvent({
-      title: selectedEvent.title,
-      startTime: selectedEvent.startTime,
-      endTime: selectedEvent.endTime,
-      description: selectedEvent.description,
-      location: selectedEvent.location,
-      color: selectedEvent.color,
-      day: selectedEvent.day,
-      month: selectedEvent.month,
-      year: selectedEvent.year,
-      isAllDay: selectedEvent.isAllDay || false,
-      isMultiDay: selectedEvent.isMultiDay || false,
-      endDay: selectedEvent.endDay || selectedEvent.day,
-      endMonth: selectedEvent.endMonth || selectedEvent.month,
-      endYear: selectedEvent.endYear || selectedEvent.year,
-      isRecurring: selectedEvent.isRecurring || false,
-      recurrence: selectedEvent.recurrence || {
+      title: selectedEvent?.title || "",
+      startTime: selectedEvent?.startTime || "",
+      endTime: selectedEvent?.endTime || "",
+      description: selectedEvent?.description || "",
+      location: selectedEvent?.location || "",
+      color: selectedEvent?.color || "bg-blue-600",
+      exactColor: selectedEvent?.exactColor || null,
+      day: selectedEvent?.day || 1,
+      month: selectedEvent?.month || 0,
+      year: selectedEvent?.year || 2024,
+      isAllDay: selectedEvent?.isAllDay || false,
+      isMultiDay: selectedEvent?.isMultiDay || false,
+      endDay: selectedEvent?.endDay || selectedEvent?.day || 1,
+      endMonth: selectedEvent?.endMonth || selectedEvent?.month || 0,
+      endYear: selectedEvent?.endYear || selectedEvent?.year || 2024,
+      isRecurring: selectedEvent?.isRecurring || false,
+      recurrence: selectedEvent?.recurrence || {
         frequency: "weekly",
         interval: 1,
         daysOfWeek: [new Date().getDay()],
@@ -2806,6 +2870,129 @@ export default function Home() {
       setIsAuthLoading(false);
     }
   }, []);
+
+  // Load settings when user signs in
+  useEffect(() => {
+    if (user?.id) {
+      loadSettings(user.id);
+    }
+  }, [user?.id, loadSettings]);
+
+  // Sync local state with settings context
+  useEffect(() => {
+    if (settings) {
+      setCurrentView(settings.currentView);
+      setSelectedTimeZone(settings.selectedTimeZone);
+      setCompactness(settings.compactness);
+      setBackgroundOpacity(settings.backgroundOpacity);
+      setBackgroundBlur(settings.backgroundBlur);
+      setBackgroundImage(settings.backgroundImage);
+      setCustomBackgroundUrl(settings.customBackgroundUrl);
+      setSidebarCollapsed(settings.sidebarCollapsed);
+      setSidebarTab(settings.sidebarTab);
+      setAllDayEventDisplay(settings.allDayEventDisplay);
+      setShowTimeline(settings.showTimeline);
+      setSelectedCalendarForNewEvents(settings.selectedCalendarForNewEvents);
+    }
+  }, [
+    settings?.currentView,
+    settings?.selectedTimeZone,
+    settings?.compactness,
+    settings?.backgroundOpacity,
+    settings?.backgroundBlur,
+    settings?.backgroundImage,
+    settings?.customBackgroundUrl,
+    settings?.sidebarCollapsed,
+    settings?.sidebarTab,
+    settings?.allDayEventDisplay,
+    settings?.showTimeline,
+    settings?.selectedCalendarForNewEvents,
+  ]);
+
+  // Update settings when local state changes
+  useEffect(() => {
+    if (user?.id) {
+      updateSettings({
+        currentView,
+        selectedTimeZone,
+        compactness,
+        backgroundOpacity,
+        backgroundBlur,
+        backgroundImage,
+        customBackgroundUrl,
+        sidebarCollapsed,
+        sidebarTab,
+        allDayEventDisplay,
+        showTimeline,
+        selectedCalendarForNewEvents,
+      });
+    }
+  }, [
+    user?.id,
+    currentView,
+    selectedTimeZone,
+    compactness,
+    backgroundOpacity,
+    backgroundBlur,
+    backgroundImage,
+    customBackgroundUrl,
+    sidebarCollapsed,
+    sidebarTab,
+    allDayEventDisplay,
+    showTimeline,
+    selectedCalendarForNewEvents,
+  ]);
+
+  // Event update function for drag-and-drop
+  const handleEventUpdate = async (eventId: string, newStartTime: string, newEndTime: string): Promise<boolean> => {
+    try {
+      const event = events.find(e => e.id === eventId)
+      if (!event) return false
+
+      if (event.source === "google" && event.googleId && event.calendarId) {
+        // Update Google Calendar event
+        const updatedEvent = {
+          ...event,
+          startTime: newStartTime,
+          endTime: newEndTime
+        }
+        
+        const success = await updateGoogleCalendarEvent(updatedEvent, event.googleId, event.calendarId)
+        if (success) {
+          // Update local state
+          setEvents(prevEvents =>
+            prevEvents.map(e =>
+              e.id === eventId
+                ? { ...e, startTime: newStartTime, endTime: newEndTime }
+                : e
+            )
+          )
+          return true
+        }
+        return false
+      } else {
+        // Update local event
+        setEvents(prevEvents =>
+          prevEvents.map(e =>
+            e.id === eventId
+              ? { ...e, startTime: newStartTime, endTime: newEndTime }
+              : e
+          )
+        )
+        return true
+      }
+    } catch (error) {
+      console.error("Error updating event:", error)
+      return false
+    }
+  }
+
+  // Initialize drag-and-drop hook
+  const { dragState, startDrag, cancelDrag } = useEventDrag({
+    onEventUpdate: handleEventUpdate,
+    onError: (message) => setSyncError(message),
+    slotHeight: getSlotHeight()
+  })
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
@@ -3213,170 +3400,171 @@ export default function Home() {
         {/* Event Details Modal */}
         {selectedEvent && (
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
             onClick={() => setSelectedEvent(null)}
           >
             <div
-              className={`${selectedEvent.color} p-6 rounded-lg shadow-xl max-w-md w-full mx-4`}
-              style={selectedEvent.exactColor ? { backgroundColor: selectedEvent.exactColor } : {}}
+              className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-2 flex-1">
-                  <h3 className="text-2xl font-bold text-white">{selectedEvent.title}</h3>
-                  {selectedEvent.isRecurring && <Repeat className="h-5 w-5 text-white" />}
-                </div>
-                <button
-                  onClick={() => setSelectedEvent(null)}
-                  className="ml-2 p-1 rounded-full hover:bg-white/20 transition-colors"
-                >
-                  <X className="w-5 h-5 text-white" />
-                </button>
-              </div>
-
-              {selectedEvent.source === "google" && (
-                <div className="mb-3">
-                  <span className="inline-block text-sm bg-white/20 px-2 py-1 rounded">
-                    📅 {selectedEvent.calendarName || "Google Calendar"}
-                  </span>
-                </div>
-              )}
-
-              <div className="space-y-3 text-white">
-                <div className="flex items-center">
-                  <svg className="mr-2 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <span>
-                    {selectedEvent.isAllDay ? "All Day" : `${selectedEvent.startTime} - ${selectedEvent.endTime}`}
-                  </span>
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-2 flex-1">
+                    <h3 className="text-2xl font-bold text-white">{selectedEvent.title}</h3>
+                    {selectedEvent.isRecurring && <Repeat className="h-5 w-5 text-white" />}
+                  </div>
+                  <button
+                    onClick={() => setSelectedEvent(null)}
+                    className="ml-2 p-1 rounded-full hover:bg-white/20 transition-colors"
+                  >
+                    <X className="w-5 h-5 text-white" />
+                  </button>
                 </div>
 
-                <div className="flex items-center">
-                  <svg className="mr-2 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <span>
-                    {monthNames[selectedEvent.month]} {selectedEvent.day}, {selectedEvent.year}
-                    {selectedEvent.isMultiDay &&
-                      ` - ${monthNames[selectedEvent.endMonth]} ${selectedEvent.endDay}, ${selectedEvent.endYear}`}
-                  </span>
-                </div>
-
-                {selectedEvent.location && (
-                  <div className="flex items-start">
-                    <svg
-                      className="mr-2 h-5 w-5 flex-shrink-0 mt-0.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                    </svg>
-                    <div>
-                      <div>{selectedEvent.location}</div>
-                      <a
-                        href={getGoogleMapsUrl(selectedEvent.location)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm underline hover:no-underline"
-                      >
-                        View on Google Maps
-                      </a>
-                    </div>
+                {selectedEvent.source === "google" && (
+                  <div className="mb-3">
+                    <span className="inline-block text-sm bg-white/20 px-2 py-1 rounded">
+                      📅 {selectedEvent.calendarName || "Google Calendar"}
+                    </span>
                   </div>
                 )}
 
-                {selectedEvent.description && (
-                  <div className="flex items-start">
-                    <svg
-                      className="mr-2 h-5 w-5 flex-shrink-0 mt-0.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                    <span>{selectedEvent.description}</span>
-                  </div>
-                )}
-
-                {selectedEvent.organizer && (
+                <div className="space-y-3 text-white">
                   <div className="flex items-center">
                     <svg className="mr-2 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
                     </svg>
-                    <span>Organizer: {selectedEvent.organizer}</span>
+                    <span>
+                      {selectedEvent.isAllDay ? "All Day" : `${selectedEvent.startTime} - ${selectedEvent.endTime}`}
+                    </span>
                   </div>
-                )}
 
-                {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
-                  <div className="flex items-start">
-                    <svg
-                      className="mr-2 h-5 w-5 flex-shrink-0 mt-0.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
+                  <div className="flex items-center">
+                    <svg className="mr-2 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                       />
                     </svg>
-                    <div>
-                      <div>Attendees ({selectedEvent.attendees.length}):</div>
-                      <div className="text-sm opacity-90">{selectedEvent.attendees.join(", ")}</div>
-                    </div>
+                    <span>
+                      {monthNames[selectedEvent.month]} {selectedEvent.day}, {selectedEvent.year}
+                      {selectedEvent.isMultiDay &&
+                        ` - ${monthNames[selectedEvent.endMonth]} ${selectedEvent.endDay}, ${selectedEvent.endYear}`}
+                    </span>
                   </div>
-                )}
-              </div>
 
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={handleEditEvent}
-                  className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 px-4 rounded-md transition-colors"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={handleDeleteEvent}
-                  className="flex-1 bg-red-500/80 hover:bg-red-500 text-white py-2 px-4 rounded-md transition-colors"
-                >
-                  Delete
-                </button>
+                  {selectedEvent.location && (
+                    <div className="flex items-start">
+                      <svg
+                        className="mr-2 h-5 w-5 flex-shrink-0 mt-0.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                        />
+                      </svg>
+                      <div>
+                        <div>{selectedEvent.location}</div>
+                        <a
+                          href={getGoogleMapsUrl(selectedEvent.location)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm underline hover:no-underline"
+                        >
+                          View on Google Maps
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedEvent.description && (
+                    <div className="flex items-start">
+                      <svg
+                        className="mr-2 h-5 w-5 flex-shrink-0 mt-0.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                      <span>{selectedEvent.description}</span>
+                    </div>
+                  )}
+
+                  {selectedEvent.organizer && (
+                    <div className="flex items-center">
+                      <svg className="mr-2 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        />
+                      </svg>
+                      <span>Organizer: {selectedEvent.organizer}</span>
+                    </div>
+                  )}
+
+                  {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
+                    <div className="flex items-start">
+                      <svg
+                        className="mr-2 h-5 w-5 flex-shrink-0 mt-0.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                        />
+                      </svg>
+                      <div>
+                        <div>Attendees ({selectedEvent.attendees.length}):</div>
+                        <div className="text-sm opacity-90">{selectedEvent.attendees.join(", ")}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={handleEditEvent}
+                    className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 px-4 rounded-md transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={handleDeleteEvent}
+                    className="flex-1 bg-red-500/80 hover:bg-red-500 text-white py-2 px-4 rounded-md transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -3389,7 +3577,7 @@ export default function Home() {
             onClick={handleCloseCreateModal}
           >
             <div
-              className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto custom-scrollbar"
+              className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6">
@@ -4066,18 +4254,31 @@ export default function Home() {
                   {/* Color Selection */}
                   <div>
                     <label className="block text-white text-sm font-medium mb-2">Color</label>
-                    <div className="grid grid-cols-11 gap-2">
-                      {eventColors.map((color) => (
-                        <button
-                          key={color.value}
-                          onClick={() => setNewEvent({ ...newEvent, color: color.value })}
-                          className={`w-8 h-8 rounded-full ${color.preview} border-2 ${
-                            newEvent.color === color.value ? "border-white" : "border-transparent"
-                          } hover:scale-110 transition-transform`}
-                          title={color.name}
-                        />
-                      ))}
-                    </div>
+                    <AdvancedColorPicker
+                      currentColor={newEvent.exactColor || '#3B82F6'} // Always pass hex color
+                      onChange={(color) => {
+                        // The color picker always returns hex colors
+                        if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                          // Find the matching Tailwind class for this hex color
+                          const colorMap: { [key: string]: string } = {
+                            '#3B82F6': 'bg-blue-600',
+                            '#10B981': 'bg-green-600',
+                            '#8B5CF6': 'bg-purple-600',
+                            '#EF4444': 'bg-red-600',
+                            '#F59E0B': 'bg-yellow-600',
+                            '#EC4899': 'bg-pink-600',
+                            '#06B6D4': 'bg-cyan-600',
+                            '#84CC16': 'bg-lime-600',
+                            '#F97316': 'bg-orange-600',
+                            '#6366F1': 'bg-indigo-600',
+                          };
+                          const tailwindClass = colorMap[color] || 'bg-blue-600';
+                          setNewEvent({ ...newEvent, color: tailwindClass, exactColor: color });
+                        }
+                      }}
+                      onRecentColorAdd={addRecentColor}
+                      recentColors={settings?.recentColors || []}
+                    />
                   </div>
 
                   {/* Action Buttons */}
@@ -4103,8 +4304,8 @@ export default function Home() {
 
         {/* Recurring Event Confirmation Dialog */}
         {showRecurringDialog && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center gap-3 mb-4">
                 <Repeat className="h-6 w-6 text-blue-400" />
                 <h3 className="text-xl font-bold text-white">Edit Recurring Event</h3>

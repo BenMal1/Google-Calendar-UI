@@ -1,170 +1,149 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react"
 import { useDebounce } from "../hooks/useDebounce"
 
+// Define the user settings interface to match the API
 interface UserSettings {
-  theme: string
-  timeFormat: string
-  defaultView: string
-  notifications: {
-    email: boolean
-    push: boolean
-    sound: boolean
-  }
-  calendarSettings: {
-    showWeekends: boolean
-    showHolidays: boolean
-    defaultDuration: number
-  }
-  displaySettings: {
-    showWeather: boolean
-    showTasks: boolean
-    compactMode: boolean
-    backgroundBlur?: number
-  }
+  // Display settings
+  currentView: "day" | "week" | "month"
+  compactness: number
+  backgroundOpacity: number
+  backgroundBlur: number
+  backgroundImage: string
+  customBackgroundUrl: string
+  allDayEventDisplay: "full" | "compact"
+  showTimeline: boolean
+  
+  // Time and date settings
+  selectedTimeZone: string
+  
+  // UI preferences
+  sidebarCollapsed: boolean
+  sidebarTab: "calendar" | "calendars"
+  
+  // Calendar preferences
+  selectedCalendarForNewEvents: string
+  
+  // Color preferences
+  recentColors: string[]
+  
+  // Metadata
+  lastUpdated: string
+  version: string
+}
+
+// Default settings that will be used if no settings exist
+const defaultSettings: UserSettings = {
+  currentView: "week",
+  compactness: 50,
+  backgroundOpacity: 40,
+  backgroundBlur: 0,
+  backgroundImage: "mountain",
+  customBackgroundUrl: "",
+  allDayEventDisplay: "full",
+  showTimeline: false,
+  selectedTimeZone: "America/New_York",
+  sidebarCollapsed: false,
+  sidebarTab: "calendar",
+  selectedCalendarForNewEvents: "primary",
+  recentColors: [],
+  lastUpdated: new Date().toISOString(),
+  version: "1.0.0"
 }
 
 interface SettingsContextType {
-  settings: UserSettings | null
+  settings: UserSettings
   isLoading: boolean
-  error: string | null
-  saveSettings: (updates: Partial<UserSettings>) => Promise<void>
+  updateSettings: (updates: Partial<UserSettings>) => void
+  loadSettings: (googleId: string) => Promise<void>
+  addRecentColor: (color: string) => void
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)
 
-export function SettingsProvider({ children, googleId }: { children: ReactNode; googleId: string | null }) {
-  const [settings, setSettings] = useState<UserSettings | null>(null)
+export function SettingsProvider({ children }: { children: ReactNode }) {
+  const [settings, setSettings] = useState<UserSettings>(defaultSettings)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  // Load settings from localStorage on initial mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedSettings = localStorage.getItem('calendar_settings')
-      if (savedSettings) {
-        try {
-          setSettings(JSON.parse(savedSettings))
-        } catch (err) {
-          console.error('Error parsing saved settings:', err)
-        }
-      }
-    }
-  }, [])
-
-  // Fetch settings
-  const fetchSettings = useCallback(async (id: string) => {
+  // Load settings from API
+  const loadSettings = useCallback(async (googleId: string) => {
     try {
       setIsLoading(true)
-      setError(null)
-      const response = await fetch(`/api/user-settings?googleId=${id}`)
-      if (!response.ok) {
-        throw new Error("Failed to fetch settings")
+      const response = await fetch(`/api/user-settings?googleId=${googleId}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        setSettings(data)
+      } else {
+        // If no settings exist, use defaults
+        setSettings(defaultSettings)
       }
-      const data = await response.json()
-      setSettings(data)
-      // Save to localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('calendar_settings', JSON.stringify(data))
-      }
-    } catch (err) {
-      console.error("Error fetching settings:", err)
-      setError("Failed to load settings")
-      // If API fails, try to load from localStorage
-      if (typeof window !== 'undefined') {
-        const savedSettings = localStorage.getItem('calendar_settings')
-        if (savedSettings) {
-          try {
-            setSettings(JSON.parse(savedSettings))
-          } catch (parseErr) {
-            console.error('Error parsing saved settings:', parseErr)
-          }
-        }
-      }
+    } catch (error) {
+      console.error("Error loading settings:", error)
+      // Fallback to defaults
+      setSettings(defaultSettings)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  // Update settings
-  const updateSettings = useCallback(async (updates: Partial<UserSettings>) => {
-    if (!googleId) return
-
+  // Update settings with debouncing
+  const debouncedUpdateSettings = useDebounce(async (googleId: string, updates: Partial<UserSettings>) => {
     try {
-      setIsLoading(true)
-      setError(null)
-
+      const updatedSettings = { ...settings, ...updates, lastUpdated: new Date().toISOString() }
+      
       const response = await fetch("/api/user-settings", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          googleId,
-          settings: updates,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ googleId, settings: updatedSettings }),
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to save settings")
+      if (response.ok) {
+        const data = await response.json()
+        setSettings(data)
       }
-
-      const { settings: updatedSettings } = await response.json()
-      setSettings(updatedSettings)
-      // Save to localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('calendar_settings', JSON.stringify(updatedSettings))
-      }
-    } catch (err) {
-      console.error("Error saving settings:", err)
-      setError("Failed to save settings")
-      // If API fails, still update localStorage
-      if (settings && typeof window !== 'undefined') {
-        const updatedSettings = { ...settings, ...updates }
-        localStorage.setItem('calendar_settings', JSON.stringify(updatedSettings))
-      }
-    } finally {
-      setIsLoading(false)
+    } catch (error) {
+      console.error("Error saving settings:", error)
     }
-  }, [googleId, settings])
+  }, 500)
 
-  // Debounced save function
-  const debouncedSaveSettings = useDebounce(updateSettings, 300)
+  // Update settings function
+  const updateSettings = useCallback((updates: Partial<UserSettings>) => {
+    setSettings(prev => ({ ...prev, ...updates }))
+    
+    // Get googleId from localStorage or use a default
+    const savedUser = localStorage.getItem("calendar_user")
+    const googleId = savedUser ? JSON.parse(savedUser).id : "default"
+    
+    debouncedUpdateSettings(googleId, updates)
+  }, [debouncedUpdateSettings])
 
-  // Save settings with immediate local update
-  const saveSettings = useCallback(
-    async (updates: Partial<UserSettings>) => {
-      if (!settings) return
+  // Add recent color function
+  const addRecentColor = useCallback((color: string) => {
+    setSettings(prev => {
+      const recentColors = [color, ...prev.recentColors.filter(c => c !== color)].slice(0, 8)
+      return { ...prev, recentColors }
+    })
+    
+    // Get googleId from localStorage or use a default
+    const savedUser = localStorage.getItem("calendar_user")
+    const googleId = savedUser ? JSON.parse(savedUser).id : "default"
+    
+    debouncedUpdateSettings(googleId, { recentColors: [color, ...settings.recentColors.filter(c => c !== color)].slice(0, 8) })
+  }, [settings.recentColors, debouncedUpdateSettings])
 
-      // Update local state immediately
-      setSettings({
-        ...settings,
-        ...updates,
-      })
-
-      // Debounce the API call
-      await debouncedSaveSettings(updates)
-    },
-    [settings, debouncedSaveSettings]
-  )
-
-  // Fetch settings when googleId changes
-  useEffect(() => {
-    if (googleId) {
-      fetchSettings(googleId)
-    }
-  }, [googleId, fetchSettings])
+  // Memoize the context value to prevent unnecessary re-renders
+  const value = useMemo(() => ({
+    settings,
+    isLoading,
+    updateSettings,
+    loadSettings,
+    addRecentColor,
+  }), [settings, isLoading, updateSettings, loadSettings, addRecentColor])
 
   return (
-    <SettingsContext.Provider
-      value={{
-        settings,
-        isLoading,
-        error,
-        saveSettings,
-      }}
-    >
+    <SettingsContext.Provider value={value}>
       {children}
     </SettingsContext.Provider>
   )
