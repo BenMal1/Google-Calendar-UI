@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { kv } from "@vercel/kv"
+
+// Fallback in-memory storage for when KV is not available
+const fallbackStorage = new Map<string, string>()
 
 // Mock default settings
 const defaultSettings = {
@@ -24,6 +26,17 @@ const defaultSettings = {
   },
 }
 
+// Helper function to safely access KV
+async function getKV() {
+  try {
+    const { kv } = await import("@vercel/kv")
+    return kv
+  } catch (error) {
+    console.warn("Vercel KV not available, using fallback storage:", error)
+    return null
+  }
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const googleId = searchParams.get("googleId")
@@ -36,8 +49,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Try to get settings from KV
-    const storedSettings = await kv.get(googleId)
+    const kv = await getKV()
+    let storedSettings: string | null = null
+    
+    if (kv) {
+      // Try to get settings from KV
+      storedSettings = await kv.get(googleId)
+    } else {
+      // Use fallback storage
+      storedSettings = fallbackStorage.get(googleId) || null
+    }
     
     if (!storedSettings) {
       // If no settings exist, return defaults
@@ -45,7 +66,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse and return stored settings
-    const settings = JSON.parse(storedSettings as string)
+    const settings = JSON.parse(storedSettings)
     return NextResponse.json(settings)
   } catch (error) {
     console.error("Error fetching settings:", error)
@@ -68,13 +89,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Merge with defaults and store in KV
+    // Merge with defaults and store
     const updatedSettings = {
       ...defaultSettings,
       ...settings,
     }
 
-    await kv.set(googleId, JSON.stringify(updatedSettings))
+    const settingsString = JSON.stringify(updatedSettings)
+    const kv = await getKV()
+    
+    if (kv) {
+      // Store in KV
+      await kv.set(googleId, settingsString)
+    } else {
+      // Store in fallback storage
+      fallbackStorage.set(googleId, settingsString)
+    }
 
     return NextResponse.json({
       message: "Settings updated successfully",
