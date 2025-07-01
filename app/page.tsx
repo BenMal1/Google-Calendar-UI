@@ -3323,6 +3323,83 @@ const cleanPayload: {
     }
   }, [currentDate, currentView, loadedRanges, user, googleCalendars]);
 
+  // Add this helper function inside the Home component in page.tsx
+  const collectStateForSaving = () => {
+    const calendarVisibility = googleCalendars.reduce((acc, cal) => {
+      acc[cal.id] = cal.visible;
+      return acc;
+    }, {} as Record<string, boolean>);
+
+    // This object bundles everything we want to save.
+    return {
+      user,
+      settings,
+      calendarVisibility,
+    };
+  };
+
+  // Add this useEffect to page.tsx for loading data on startup
+  useEffect(() => {
+    // Only run if we have a user ID and haven't loaded settings yet.
+    if (user?.id) {
+      const loadPersistedState = async () => {
+        try {
+          const response = await fetch(`/api/settings?userId=${user.id}`);
+
+          if (response.ok) {
+            const savedState = await response.json();
+            console.log("Loaded persisted state:", savedState);
+
+            // Apply the loaded settings
+            if (savedState.settings) {
+              updateSettings(savedState.settings);
+            }
+            if (savedState.user) {
+              setUser(currentUser => ({...savedState.user, accessToken: currentUser?.accessToken}));
+            }
+            if (savedState.calendarVisibility) {
+              setGoogleCalendars(currentCalendars => 
+                currentCalendars.map(cal => ({
+                  ...cal,
+                  visible: savedState.calendarVisibility[cal.id] ?? cal.visible,
+                }))
+              );
+            }
+          } else {
+            console.log("No saved state found for this user. Using defaults.");
+          }
+        } catch (error) {
+          console.error("Failed to load persisted state:", error);
+        }
+      };
+
+      loadPersistedState();
+    }
+  }, [user?.id]); // This effect runs only once when the user's ID becomes available.
+
+  // Add this useEffect to page.tsx for saving data on exit
+  useEffect(() => {
+    const handleSaveStateOnExit = () => {
+      if (!user?.id) return; // Don't save if there is no user.
+
+      const stateToSave = collectStateForSaving();
+      const stateJSON = JSON.stringify(stateToSave);
+      const url = `/api/settings?userId=${user.id}`;
+
+      // Use navigator.sendBeacon to reliably send data as the page unloads.
+      // It's a non-blocking request, perfect for this use case.
+      navigator.sendBeacon(url, stateJSON);
+      console.log("Attempted to save state on page exit.");
+    };
+
+    window.addEventListener('beforeunload', handleSaveStateOnExit);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleSaveStateOnExit);
+    };
+  // Re-attach listener if key state changes to ensure the latest state is always saved.
+  }, [user, settings, googleCalendars]); 
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
       {/* Background Image with dynamic blur effect */}
