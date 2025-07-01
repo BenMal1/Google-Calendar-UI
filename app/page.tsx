@@ -763,16 +763,16 @@ export default function Home() {
           : (cal.primary || cal.selected || false);
 
         return {
-          id: cal.id,
-          summary: cal.summary,
-          description: cal.description,
-          backgroundColor: cal.backgroundColor,
-          foregroundColor: cal.foregroundColor,
-          primary: cal.primary,
-          accessRole: cal.accessRole,
-          selected: cal.selected,
+        id: cal.id,
+        summary: cal.summary,
+        description: cal.description,
+        backgroundColor: cal.backgroundColor,
+        foregroundColor: cal.foregroundColor,
+        primary: cal.primary,
+        accessRole: cal.accessRole,
+        selected: cal.selected,
           visible: isVisible, // Use the merged visibility state
-          colorId: cal.colorId,
+        colorId: cal.colorId,
         };
       });
 
@@ -824,6 +824,7 @@ export default function Home() {
         startDate = new Date(timeMin);
         endDate = new Date(timeMax);
       } else {
+        // If not provided, default to current month
         startDate = new Date(currentDate)
         startDate.setMonth(startDate.getMonth() - 1)
         endDate = new Date(currentDate)
@@ -831,7 +832,7 @@ export default function Home() {
       }
       const timeMinStr = startDate.toISOString();
       const timeMaxStr = endDate.toISOString();
-      
+
       console.log("Date range for events:", { timeMin: timeMinStr, timeMax: timeMaxStr });
 
       const allEvents: GoogleCalendarEvent[] = []
@@ -897,7 +898,7 @@ export default function Home() {
       })
       setLastSyncTime(new Date())
       setSyncStatus("synced")
-      // Add the loaded range to loadedRanges
+      // Add the loaded range to loadedRanges (merge with existing)
       setLoadedRanges(prev => mergeRanges([...prev, { start: startDate, end: endDate }]))
       console.log("=== fetchGoogleCalendarEvents completed successfully ===");
     } catch (error) {
@@ -983,13 +984,13 @@ export default function Home() {
         isMultiDay: !isAllDay && startDate.toDateString() !== endDate.toDateString(),
         endDay: endDate.getDate(),
         endMonth: endDate.getMonth(),
-        endYear: endDate.getFullYear(),
+  endYear: endDate.getFullYear(),
         source: "google",
-        googleId: event.id,
-        calendarId: event.calendarId,
-        calendarName: calendar?.summary || "Unknown Calendar",
-        recurringEventId: event.recurringEventId,
-        isRecurring,
+  googleId: event.id,
+  calendarId: event.calendarId,
+  calendarName: calendar?.summary || "Unknown Calendar",
+  recurringEventId: event.recurringEventId,
+  isRecurring,
       });
       return acc;
     }, []);
@@ -1059,7 +1060,7 @@ export default function Home() {
       const month = isStart ? eventData.month : eventData.endMonth;
       const day = isStart ? eventData.day : eventData.endDay;
       const time = isStart ? eventData.startTime : eventData.endTime;
-      
+
       // Create a Date object in the user's timezone
       const dateString = `${year}-${(month + 1).toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}T${time}:00`;
       const localDate = new Date(dateString);
@@ -1084,35 +1085,35 @@ export default function Home() {
     try {
       // Create a clean payload with only the fields that are allowed to be modified
       // This prevents 400 errors from sending read-only fields like id, etag, htmlLink, etc.
-      const cleanPayload: {
-        summary: string;
-        description: string;
-        location: string;
-        start: { date: string } | { dateTime: string; timeZone: string };
-        end: { date: string } | { dateTime: string; timeZone: string };
-        colorId: string;
-        recurrence?: string[];
-      } = {
-        summary: eventData.title,
-        description: eventData.description || "",
-        location: eventData.location || "",
-        start: eventData.isAllDay
-          ? {
-              date: formatDateForGoogleAPI(eventData, true),
-            }
-          : {
-              dateTime: formatDateForGoogleAPI(eventData, true),
+const cleanPayload: {
+  summary: string;
+  description: string;
+  location: string;
+  start: { date: string } | { dateTime: string; timeZone: string };
+  end: { date: string } | { dateTime: string; timeZone: string };
+  colorId: string;
+  recurrence?: string[];
+} = {
+  summary: eventData.title,
+  description: eventData.description || "",
+  location: eventData.location || "",
+  start: eventData.isAllDay
+    ? {
+        date: formatDateForGoogleAPI(eventData, true),
+      }
+    : {
+        dateTime: formatDateForGoogleAPI(eventData, true),
               timeZone: selectedTimeZone,
-            },
-        end: eventData.isAllDay
-          ? {
-              date: formatDateForGoogleAPI(eventData, false),
-            }
-          : {
-              dateTime: formatDateForGoogleAPI(eventData, false),
+      },
+  end: eventData.isAllDay
+    ? {
+        date: formatDateForGoogleAPI(eventData, false),
+      }
+    : {
+        dateTime: formatDateForGoogleAPI(eventData, false),
               timeZone: selectedTimeZone,
-            },
-        colorId: eventColors.find((color) => color.value === eventData.color)?.googleId || "1",
+      },
+  colorId: eventColors.find((color) => color.value === eventData.color)?.googleId || "1",
       }
 
       // Add recurrence if specified (this should be an array of RRULE strings)
@@ -1241,11 +1242,11 @@ export default function Home() {
       console.log("[API RESPONSE] Status:", response.status, response.statusText);
       console.log("[API RESPONSE] Headers:", Object.fromEntries(response.headers.entries()));
 
-      if (!response.ok) {
+    if (!response.ok) {
         const errorDetails = await response.text();
-        console.error('[API ERROR DETAILS]', errorDetails);
+      console.error('[API ERROR DETAILS]', errorDetails);
         throw new Error(`Failed to update event: ${response.status} ${response.statusText} - ${errorDetails}`)
-      }
+    }
 
       const updatedEvent = await response.json()
       console.log("[API SUCCESS] Updated event:", updatedEvent);
@@ -1302,146 +1303,146 @@ export default function Home() {
 
     const { eventData, googleEventId, calendarId } = pendingEventUpdate
 
-    // Find the original event from the events array using editingEventId
-    const originalEvent = events.find(event => event.id === editingEventId);
-    
-    console.log("=== RECURRING EVENT CONFIRM START ===");
-    console.log("Editing event ID:", editingEventId);
-    console.log("Original event found:", originalEvent);
+      // Find the original event from the events array using editingEventId
+      const originalEvent = events.find(event => event.id === editingEventId);
+      
+      console.log("=== RECURRING EVENT CONFIRM START ===");
+      console.log("Editing event ID:", editingEventId);
+      console.log("Original event found:", originalEvent);
     console.log("Pending event update:", pendingEventUpdate);
-    console.log("Recurring event action:", recurringEventAction);
+      console.log("Recurring event action:", recurringEventAction);
 
-    if (!originalEvent) {
-      console.error("Original event not found in events array");
+      if (!originalEvent) {
+        console.error("Original event not found in events array");
       setSyncError("Event not found. Please try again.");
-      return;
-    }
-
-    if (originalEvent.source === "google" && originalEvent.googleId && originalEvent.calendarId) {
-      console.log("Google Calendar recurring event detected");
-      console.log("Sending API request...");
-      
-      // Update Google Calendar event with the selected scope
-      const success = await updateGoogleCalendarEvent(eventData, googleEventId, calendarId, recurringEventAction)
-      if (!success) {
-        console.error("API call failed");
-        setSyncError("Failed to update Google Calendar event. Please try again.");
-        return // Don't close modal if update failed
+        return;
       }
-      
-      console.log("API call successful, updating local state");
-      
-      // Update local state immediately after successful API call
-      setEvents((prevEvents) =>
-        prevEvents.map((event) =>
-          event.id === editingEventId
-            ? {
-                ...event,
-                title: eventData.title,
-                startTime: eventData.startTime,
-                endTime: eventData.endTime,
-                description: eventData.description,
-                location: eventData.location,
-                color: eventData.color,
-                day: eventData.day,
-                month: eventData.month,
-                year: eventData.year,
-                isAllDay: eventData.isAllDay,
-                isMultiDay: eventData.isMultiDay,
-                endDay: eventData.endDay,
-                endMonth: eventData.endMonth,
-                endYear: eventData.endYear,
-                // Preserve original event properties that shouldn't change
-                id: event.id,
-                source: event.source,
-                attendees: event.attendees,
-                organizer: event.organizer,
-                googleId: event.googleId,
-                calendarId: event.calendarId,
-                calendarName: event.calendarName,
-                exactColor: eventData.exactColor,
-              }
-            : event,
-        ),
-      )
-      
-      console.log("Local state updated successfully");
-    } else {
-      console.log("Local recurring event detected");
-      // Update local event - find and update the correct event
-      setEvents((prevEvents) =>
-        prevEvents.map((event) =>
-          event.id === editingEventId
-            ? {
-                ...event,
-                title: eventData.title,
-                startTime: eventData.startTime,
-                endTime: eventData.endTime,
-                description: eventData.description,
-                location: eventData.location,
-                color: eventData.color,
-                day: eventData.day,
-                month: eventData.month,
-                year: eventData.year,
-                isAllDay: eventData.isAllDay,
-                isMultiDay: eventData.isMultiDay,
-                endDay: eventData.endDay,
-                endMonth: eventData.endMonth,
-                endYear: eventData.endYear,
-                // Preserve original event properties that shouldn't change
-                id: event.id,
-                source: event.source,
-                attendees: event.attendees,
-                organizer: event.organizer,
-                googleId: event.googleId,
-                calendarId: event.calendarId,
-                calendarName: event.calendarName,
-                exactColor: eventData.exactColor,
-              }
-            : event,
-        ),
-      )
-    }
 
-    console.log("=== RECURRING EVENT CONFIRM COMPLETED ===");
+      if (originalEvent.source === "google" && originalEvent.googleId && originalEvent.calendarId) {
+        console.log("Google Calendar recurring event detected");
+        console.log("Sending API request...");
+        
+        // Update Google Calendar event with the selected scope
+        const success = await updateGoogleCalendarEvent(eventData, googleEventId, calendarId, recurringEventAction)
+        if (!success) {
+          console.error("API call failed");
+        setSyncError("Failed to update Google Calendar event. Please try again.");
+          return // Don't close modal if update failed
+        }
+        
+        console.log("API call successful, updating local state");
+        
+        // Update local state immediately after successful API call
+        setEvents((prevEvents) =>
+          prevEvents.map((event) =>
+            event.id === editingEventId
+              ? {
+                  ...event,
+                  title: eventData.title,
+                  startTime: eventData.startTime,
+                  endTime: eventData.endTime,
+                  description: eventData.description,
+                  location: eventData.location,
+                  color: eventData.color,
+                  day: eventData.day,
+                  month: eventData.month,
+                  year: eventData.year,
+                  isAllDay: eventData.isAllDay,
+                  isMultiDay: eventData.isMultiDay,
+                  endDay: eventData.endDay,
+                  endMonth: eventData.endMonth,
+                  endYear: eventData.endYear,
+                  // Preserve original event properties that shouldn't change
+                  id: event.id,
+                  source: event.source,
+                  attendees: event.attendees,
+                  organizer: event.organizer,
+                  googleId: event.googleId,
+                  calendarId: event.calendarId,
+                  calendarName: event.calendarName,
+                  exactColor: eventData.exactColor,
+                }
+              : event,
+          ),
+        )
+        
+        console.log("Local state updated successfully");
+      } else {
+        console.log("Local recurring event detected");
+        // Update local event - find and update the correct event
+        setEvents((prevEvents) =>
+          prevEvents.map((event) =>
+            event.id === editingEventId
+              ? {
+                  ...event,
+                  title: eventData.title,
+                  startTime: eventData.startTime,
+                  endTime: eventData.endTime,
+                  description: eventData.description,
+                  location: eventData.location,
+                  color: eventData.color,
+                  day: eventData.day,
+                  month: eventData.month,
+                  year: eventData.year,
+                  isAllDay: eventData.isAllDay,
+                  isMultiDay: eventData.isMultiDay,
+                  endDay: eventData.endDay,
+                  endMonth: eventData.endMonth,
+                  endYear: eventData.endYear,
+                  // Preserve original event properties that shouldn't change
+                  id: event.id,
+                  source: event.source,
+                  attendees: event.attendees,
+                  organizer: event.organizer,
+                  googleId: event.googleId,
+                  calendarId: event.calendarId,
+                  calendarName: event.calendarName,
+                  exactColor: eventData.exactColor,
+                }
+              : event,
+          ),
+        )
+      }
+
+      console.log("=== RECURRING EVENT CONFIRM COMPLETED ===");
 
     // Reset states and close modals
     setShowRecurringDialog(false)
     setPendingEventUpdate(null)
     setRecurringEventAction("this")
 
-    // Reset form and close modal
-    const currentDateInfo = getCurrentDateInfo()
-    setNewEvent({
-      title: "",
-      startTime: "09:00",
-      endTime: "10:00",
-      description: "",
-      location: "",
-      color: "bg-blue-600",
-      day: currentDateInfo.day,
-      month: currentDateInfo.month,
-      year: currentDateInfo.year,
-      isAllDay: false,
-      isMultiDay: false,
-      endDay: currentDateInfo.day,
-      endMonth: currentDateInfo.month,
-      endYear: currentDateInfo.year,
-      isRecurring: false,
-      recurrence: {
-        frequency: "weekly",
-        interval: 1,
-        daysOfWeek: [new Date().getDay()],
-        endType: "never",
-        endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        count: 10,
-      },
-    })
-    setShowCreateModal(false)
-    setIsEditMode(false)
-    setEditingEventId(null)
-    setIsCreatingEvent(false)
-    setSelectedEvent(null)
+      // Reset form and close modal
+      const currentDateInfo = getCurrentDateInfo()
+      setNewEvent({
+        title: "",
+        startTime: "09:00",
+        endTime: "10:00",
+        description: "",
+        location: "",
+        color: "bg-blue-600",
+        day: currentDateInfo.day,
+        month: currentDateInfo.month,
+        year: currentDateInfo.year,
+        isAllDay: false,
+        isMultiDay: false,
+        endDay: currentDateInfo.day,
+        endMonth: currentDateInfo.month,
+        endYear: currentDateInfo.year,
+        isRecurring: false,
+        recurrence: {
+          frequency: "weekly",
+          interval: 1,
+          daysOfWeek: [new Date().getDay()],
+          endType: "never",
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          count: 10,
+        },
+      })
+      setShowCreateModal(false)
+      setIsEditMode(false)
+      setEditingEventId(null)
+      setIsCreatingEvent(false)
+      setSelectedEvent(null)
   }
 
   const handleSaveEvent = async () => {
@@ -1676,14 +1677,14 @@ export default function Home() {
   }
 
   const handleDeleteEvent = async () => {
-    if (selectedEvent.source === "google") {
-      const success = await deleteGoogleCalendarEvent(selectedEvent.googleId, selectedEvent.calendarId)
-      if (success) {
+      if (selectedEvent.source === "google") {
+        const success = await deleteGoogleCalendarEvent(selectedEvent.googleId, selectedEvent.calendarId)
+        if (success) {
+          setSelectedEvent(null)
+        }
+      } else {
+        setEvents(events.filter((event) => event.id !== selectedEvent.id))
         setSelectedEvent(null)
-      }
-    } else {
-      setEvents(events.filter((event) => event.id !== selectedEvent.id))
-      setSelectedEvent(null)
     }
   }
 
@@ -1869,7 +1870,7 @@ export default function Home() {
     )
   }
 
-  
+
   // Format time display
   const formatTimeDisplay = (time) => {
     if (time === 0) return "12 AM"
@@ -3717,7 +3718,7 @@ export default function Home() {
                 <div className="absolute right-0 top-full mt-2 w-32 bg-white/10 backdrop-blur-lg border border-white/20 rounded-lg shadow-xl z-50">
                   <div className="p-1">
                     {['Day', 'Week', 'Month'].map((view) => (
-                      <button
+              <button
                         key={view}
                         onClick={() => {
                           setCurrentView(view.toLowerCase());
@@ -3728,9 +3729,9 @@ export default function Home() {
                             ? "bg-blue-500 text-white"
                             : "text-white/90 hover:bg-white/20"
                         }`}
-                      >
+              >
                         {view}
-                      </button>
+              </button>
                     ))}
                   </div>
                 </div>
