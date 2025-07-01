@@ -238,6 +238,10 @@ export default function Home() {
   // Add error state for handling general errors
   const [error, setError] = useState<string | null>(null);
 
+  // View dropdown state and ref
+  const [showViewDropdown, setShowViewDropdown] = useState(false);
+  const viewDropdownRef = useRef<HTMLDivElement>(null);
+
   const getCurrentDateInfo = () => {
     return {
       day: currentDate.getDate(),
@@ -267,6 +271,11 @@ export default function Home() {
     "October",
     "November",
     "December",
+  ]
+
+  const monthNamesAbbr = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
   ]
 
   // Location autocomplete state
@@ -900,75 +909,61 @@ export default function Home() {
 
   // Replace the existing convertGoogleEvents function with this enhanced version
   const convertGoogleEvents = (googleEvents: GoogleCalendarEvent[]) => {
-    return googleEvents.map((event) => {
+    return googleEvents.reduce<CalendarEvent[]>((acc, event: GoogleCalendarEvent) => {
       // Determine if it's an all-day event
-      const isAllDay = Boolean(event.start.date)
+      const isAllDay = Boolean(event.start.date);
 
       // Parse start and end times
-      let startDate, endDate, startTime, endTime
+      let startDate, endDate, startTime, endTime;
 
       if (isAllDay) {
-        // Handle undefined date values
         if (!event.start.date || !event.end.date) {
           console.warn("Missing date for all-day event:", event);
-          return null;
+          return acc;
         }
-        startDate = new Date(event.start.date)
-        endDate = new Date(event.end.date)
-        // Subtract one day from end date because Google's end date is exclusive
-        endDate.setDate(endDate.getDate() - 1)
-        startTime = "00:00"
-        endTime = "23:59"
+        startDate = new Date(event.start.date);
+        endDate = new Date(event.end.date);
+        endDate.setDate(endDate.getDate() - 1);
+        startTime = "00:00";
+        endTime = "23:59";
       } else {
-        // Handle undefined dateTime values
         if (!event.start.dateTime || !event.end.dateTime) {
           console.warn("Missing dateTime for timed event:", event);
-          return null;
+          return acc;
         }
-        startDate = new Date(event.start.dateTime)
-        endDate = new Date(event.end.dateTime)
-        startTime = `${startDate.getHours().toString().padStart(2, "0")}:${startDate.getMinutes().toString().padStart(2, "0")}`
-        endTime = `${endDate.getHours().toString().padStart(2, "0")}:${endDate.getMinutes().toString().padStart(2, "0")}`
+        startDate = new Date(event.start.dateTime);
+        endDate = new Date(event.end.dateTime);
+        startTime = `${startDate.getHours().toString().padStart(2, "0")}:${startDate.getMinutes().toString().padStart(2, "0")}`;
+        endTime = `${endDate.getHours().toString().padStart(2, "0")}:${endDate.getMinutes().toString().padStart(2, "0")}`;
       }
 
-      // Get calendar info for color
-      const calendar = googleCalendars.find((cal) => cal.id === event.calendarId)
-
-      // Use the exact color from Google Calendar if available
-      let color = "bg-blue-600" // Default fallback
-      let exactColor = null
-
+      const calendar = googleCalendars.find((cal) => cal.id === event.calendarId);
+      let color = "bg-blue-600";
+      let exactColor = null;
       if (event.calendarColor) {
-        exactColor = event.calendarColor
+        exactColor = event.calendarColor;
       } else if (calendar?.backgroundColor) {
-        exactColor = calendar.backgroundColor
+        exactColor = calendar.backgroundColor;
       }
-
-      // Map Google color ID to our color scheme as fallback
       if (!exactColor && event.colorId) {
         const colorMapping: { [key: string]: string } = {
-          "1": "bg-blue-600", // Blue
-          "2": "bg-green-600", // Green
-          "3": "bg-purple-600", // Purple
-          "4": "bg-red-600", // Red
-          "5": "bg-yellow-600", // Yellow
-          "6": "bg-pink-600", // Pink
-          "7": "bg-teal-600", // Teal
-          "8": "bg-gray-600", // Gray
-          "9": "bg-indigo-600", // Indigo
-          "10": "bg-stone-600", // Brown
-          "11": "bg-orange-600", // Orange
-        }
-        color = colorMapping[event.colorId] || "bg-blue-600"
+          "1": "bg-blue-600",
+          "2": "bg-green-600",
+          "3": "bg-purple-600",
+          "4": "bg-red-600",
+          "5": "bg-yellow-600",
+          "6": "bg-pink-600",
+          "7": "bg-teal-600",
+          "8": "bg-gray-600",
+          "9": "bg-indigo-600",
+          "10": "bg-stone-600",
+          "11": "bg-orange-600",
+        };
+        color = colorMapping[event.colorId] || "bg-blue-600";
       }
-
-      // Get attendees
-      const attendees = event.attendees ? event.attendees.map((a) => a.displayName || a.email) : []
-
-      // Check if this is a recurring event
-      const isRecurring = Boolean(event.recurringEventId || event.recurrence)
-
-      return {
+      const attendees = event.attendees ? event.attendees.map((a) => a.displayName || a.email) : [];
+      const isRecurring = Boolean(event.recurringEventId || event.recurrence);
+      acc.push({
         id: event.id,
         title: event.summary || "Untitled Event",
         startTime,
@@ -987,14 +982,15 @@ export default function Home() {
         endDay: endDate.getDate(),
         endMonth: endDate.getMonth(),
         endYear: endDate.getFullYear(),
-        source: "google" as const,
+        source: "google",
         googleId: event.id,
         calendarId: event.calendarId,
         calendarName: calendar?.summary || "Unknown Calendar",
         recurringEventId: event.recurringEventId,
         isRecurring,
-      }
-    }).filter(Boolean) as CalendarEvent[] // Filter out null values and ensure type
+      });
+      return acc;
+    }, []);
   }
 
   // Helper function to get singular form of frequency
@@ -1014,7 +1010,7 @@ export default function Home() {
   }
 
   // Helper function to convert recurrence to Google Calendar format
-  const convertRecurrenceToGoogle = (recurrence) => {
+  const convertRecurrenceToGoogle = (recurrence: any) => {
     if (!recurrence) return []
 
     const { frequency, interval, daysOfWeek, endType, endDate, count } = recurrence
@@ -1164,7 +1160,12 @@ export default function Home() {
   }
 
   // Update an existing Google Calendar event with recurring event support
-  const updateGoogleCalendarEvent = async (eventData, googleEventId, calendarId, updateScope = "this") => {
+  const updateGoogleCalendarEvent = async (
+    eventData: any,
+    googleEventId: string,
+    calendarId: string,
+    updateScope = "this"
+  ) => {
     console.log("=== UPDATE GOOGLE CALENDAR EVENT START ===");
     console.log("Event data received:", eventData);
     console.log("Google Event ID:", googleEventId);
@@ -1261,7 +1262,7 @@ export default function Home() {
   }
 
   // Delete a Google Calendar event
-  const deleteGoogleCalendarEvent = async (googleEventId, calendarId) => {
+  const deleteGoogleCalendarEvent = async (googleEventId: string, calendarId: string) => {
     if (!user?.accessToken) {
       setSyncError("No access token available. Please sign in again.")
       return false
@@ -1875,19 +1876,20 @@ export default function Home() {
   // Get display title based on current view
   const getDisplayTitle = () => {
     if (currentView === "day") {
-      return `${weekDays[currentDate.getDay()]}, ${monthNames[getCurrentDateInfo().month]} ${getCurrentDateInfo().day}, ${getCurrentDateInfo().year}`
+      return `${weekDays[currentDate.getDay()]}, ${monthNames[getCurrentDateInfo().month]} ${getCurrentDateInfo().day}, ${getCurrentDateInfo().year}`;
     } else if (currentView === "week") {
-      const startOfWeek = weekDates[0]
-      const endOfWeek = weekDates[6]
+      const startOfWeek = weekDates[0];
+      const endOfWeek = weekDates[6];
       if (startOfWeek.month === endOfWeek.month) {
-        return `${monthNames[startOfWeek.month]} ${startOfWeek.date} - ${endOfWeek.date}, ${startOfWeek.year}`
+        return `${monthNames[startOfWeek.month]} ${startOfWeek.date} - ${endOfWeek.date}, ${startOfWeek.year}`;
       } else {
-        return `${monthNames[startOfWeek.month]} ${startOfWeek.date} - ${monthNames[endOfWeek.month]} ${endOfWeek.date}, ${startOfWeek.year}`
+        // Use abbreviated month names when the week spans two months.
+        return `${monthNamesAbbr[startOfWeek.month]} ${startOfWeek.date} - ${monthNamesAbbr[endOfWeek.month]} ${endOfWeek.date}, ${startOfWeek.year}`;
       }
     } else {
-      return `${monthNames[getCurrentDateInfo().month]} ${getCurrentDateInfo().year}`
+      return `${monthNames[getCurrentDateInfo().month]} ${getCurrentDateInfo().year}`;
     }
-  }
+  };
 
   const handleTimeSlotMouseDown = (timeSlot, dayIndex = null) => {
     if (currentView === "month") return // Don't allow dragging in month view
@@ -3235,6 +3237,22 @@ export default function Home() {
     slotHeight: getSlotHeight()
   })
 
+  // Close view dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        viewDropdownRef.current &&
+        !viewDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowViewDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
       {/* Background Image with dynamic blur effect */}
@@ -3608,25 +3626,39 @@ export default function Home() {
               <h2 className="text-xl font-semibold text-white">{getDisplayTitle()}</h2>
             </div>
 
-            <div className="flex items-center gap-2 rounded-md p-1">
+            {/* View Switcher Dropdown */}
+            <div className="relative" ref={viewDropdownRef}>
               <button
-                onClick={() => setCurrentView("day")}
-                className={`px-3 py-1 rounded ${currentView === "day" ? "bg-white/20" : ""} text-white text-sm hover:bg-white/10 transition-colors`}
+                onClick={() => setShowViewDropdown(!showViewDropdown)}
+                className="flex items-center gap-2 px-4 py-2 text-white bg-white/10 rounded-md hover:bg-white/20 transition-colors"
               >
-                Day
+                <span>
+                  {currentView.charAt(0).toUpperCase() + currentView.slice(1)}
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showViewDropdown ? "rotate-180" : ""}`} />
               </button>
-              <button
-                onClick={() => setCurrentView("week")}
-                className={`px-3 py-1 rounded ${currentView === "week" ? "bg-white/20" : ""} text-white text-sm hover:bg-white/10 transition-colors`}
-              >
-                Week
-              </button>
-              <button
-                onClick={() => setCurrentView("month")}
-                className={`px-3 py-1 rounded ${currentView === "month" ? "bg-white/20" : ""} text-white text-sm hover:bg-white/10 transition-colors`}
-              >
-                Month
-              </button>
+              {showViewDropdown && (
+                <div className="absolute right-0 top-full mt-2 w-32 bg-white/10 backdrop-blur-lg border border-white/20 rounded-lg shadow-xl z-50">
+                  <div className="p-1">
+                    {['Day', 'Week', 'Month'].map((view) => (
+                      <button
+                        key={view}
+                        onClick={() => {
+                          setCurrentView(view.toLowerCase());
+                          setShowViewDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                          currentView === view.toLowerCase()
+                            ? "bg-blue-500 text-white"
+                            : "text-white/90 hover:bg-white/20"
+                        }`}
+                      >
+                        {view}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
