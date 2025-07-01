@@ -3338,10 +3338,13 @@ const cleanPayload: {
     };
   };
 
-  // Add this useEffect to page.tsx for loading data on startup
+  // Add the guard state variable near the top of Home
+  const [hasLoadedPersistedState, setHasLoadedPersistedState] = useState(false);
+
+  // Replace the data-loading useEffect with the guarded version
   useEffect(() => {
-    // Only run if we have a user ID and haven't loaded settings yet.
-    if (user?.id) {
+    // The guard condition: only run if we have a user AND we haven't loaded state yet.
+    if (user?.id && !hasLoadedPersistedState) {
       const loadPersistedState = async () => {
         try {
           const response = await fetch(`/api/settings?userId=${user.id}`);
@@ -3350,7 +3353,7 @@ const cleanPayload: {
             const savedState = await response.json();
             console.log("Loaded persisted state:", savedState);
 
-            // Apply the loaded settings
+            // Apply the loaded state
             if (savedState.settings) {
               updateSettings(savedState.settings);
             }
@@ -3365,8 +3368,9 @@ const cleanPayload: {
                 }))
               );
             }
-          } else {
-            console.log("No saved state found for this user. Using defaults.");
+
+            // Set the guard flag to true so this effect never runs again for this session.
+            setHasLoadedPersistedState(true);
           }
         } catch (error) {
           console.error("Failed to load persisted state:", error);
@@ -3375,7 +3379,7 @@ const cleanPayload: {
 
       loadPersistedState();
     }
-  }, [user?.id]); // This effect runs only once when the user's ID becomes available.
+  }, [user?.id, hasLoadedPersistedState, updateSettings]);
 
   // Add this useEffect to page.tsx for saving data on exit
   useEffect(() => {
