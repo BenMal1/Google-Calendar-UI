@@ -90,22 +90,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Update settings function (simplified without debouncing)
   const updateSettings = useCallback((updates: Partial<UserSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }))
-    
-    // Get googleId from localStorage or use a default
-    const savedUser = localStorage.getItem("calendar_user")
-    const googleId = savedUser ? JSON.parse(savedUser).id : "default"
-    
-    // Save settings immediately (no debouncing for now)
-    const updatedSettings = { ...settings, ...updates, lastUpdated: new Date().toISOString() }
-    
-    fetch("/api/user-settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ googleId, settings: updatedSettings }),
-    }).catch(error => {
-      console.error("Error saving settings:", error)
-    })
-  }, [settings])
+  }, [])
 
   // Add recent color function
   const addRecentColor = useCallback((color: string) => {
@@ -113,24 +98,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const recentColors = [color, ...prev.recentColors.filter(c => c !== color)].slice(0, 8)
       return { ...prev, recentColors }
     })
-    
-    // Get googleId from localStorage or use a default
-    const savedUser = localStorage.getItem("calendar_user")
-    const googleId = savedUser ? JSON.parse(savedUser).id : "default"
-    
-    const updatedSettings = { 
-      ...settings, 
-      recentColors: [color, ...settings.recentColors.filter(c => c !== color)].slice(0, 8) 
-    }
-    
-    fetch("/api/user-settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ googleId, settings: updatedSettings }),
-    }).catch(error => {
-      console.error("Error saving settings:", error)
-    })
-  }, [settings.recentColors])
+  }, [])
 
   // Memoize the context value to prevent unnecessary re-renders
   const value = useMemo(() => ({

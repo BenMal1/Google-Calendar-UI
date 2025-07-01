@@ -38,19 +38,19 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
+    const BLOB_STORE_ID = 'tv4s94vxdmxjs44d';
     const pathname = `settings/${userId}-settings.json`;
-    // TODO: Replace <store-id> with your actual Vercel Blob store ID or use an env variable
-    const storeId = process.env.BLOB_STORE_ID || '<store-id>';
-    const blobUrl = `https://${storeId}.public.blob.vercel-storage.com/${pathname}`;
-    const response = await fetch(blobUrl);
+    const blobUrl = `https://${BLOB_STORE_ID}.public.blob.vercel-storage.com/${pathname}`;
+    const response = await fetch(blobUrl, { next: { revalidate: 0 } }); // No caching
     if (!response.ok) {
-      if (response.status === 404) {
-        return NextResponse.json({ message: 'No settings found for this user.' }, { status: 404 });
-      }
-      throw new Error(`Failed to fetch blob: ${response.statusText}`);
+        // If the file doesn't exist (404), it's a new user. This is not an error.
+        if (response.status === 404) {
+            return NextResponse.json({ message: 'No settings found for this user.' }, { status: 404 });
+        }
+        // For other errors, throw to be caught below.
+        throw new Error(`Failed to fetch settings: ${response.statusText}`);
     }
     const settings = await response.json();
-
     return NextResponse.json(settings);
   } catch (error: any) {
     // Vercel Blob throws a 404 error if the blob is not found.
