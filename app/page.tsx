@@ -170,13 +170,11 @@ export default function Home() {
   const [editingEventId, setEditingEventId] = useState(null)
   
   // Use settings from context, fallback to defaults
-  const [currentView, setCurrentView] = useState(settings?.currentView || "week")
   const [selectedTimeZone, setSelectedTimeZone] = useState(settings?.selectedTimeZone || "America/New_York")
   const [compactness, setCompactness] = useState(settings?.compactness || 50)
   const [backgroundOpacity, setBackgroundOpacity] = useState(settings?.backgroundOpacity || 40)
   const [backgroundBlur, setBackgroundBlur] = useState(settings?.backgroundBlur || 0)
   const [backgroundImage, setBackgroundImage] = useState(settings?.backgroundImage || "mountain")
-  const [customBackgroundUrl, setCustomBackgroundUrl] = useState(settings?.customBackgroundUrl || "")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(settings?.sidebarCollapsed || false)
   const [sidebarTab, setSidebarTab] = useState(settings?.sidebarTab || "calendar")
   const [allDayEventDisplay, setAllDayEventDisplay] = useState(settings?.allDayEventDisplay || "full")
@@ -1772,14 +1770,14 @@ const cleanPayload: {
   const shouldShowCurrentTimeLine = (dayDate = null) => {
     const now = new Date()
 
-    if (currentView === "day") {
+    if (settings.currentView === "day") {
       // For day view, check if viewing current day
       return (
         currentDate.getDate() === now.getDate() &&
         currentDate.getMonth() === now.getMonth() &&
         currentDate.getFullYear() === now.getFullYear()
       )
-    } else if (currentView === "week" && dayDate) {
+    } else if (settings.currentView === "week" && dayDate) {
       // For week view, check if this specific day is today
       return dayDate.date === now.getDate() && dayDate.month === now.getMonth() && dayDate.year === now.getFullYear()
     }
@@ -1789,8 +1787,8 @@ const cleanPayload: {
 
   // Restore this helper function to determine the correct background image URL
   const getCurrentBackgroundUrl = () => {
-    if (backgroundImage === "custom" && customBackgroundUrl) {
-      return customBackgroundUrl;
+    if (backgroundImage === "custom" && settings.customBackgroundUrl) {
+      return settings.customBackgroundUrl;
     }
     // You need to define backgroundImages array if it was also removed.
     // Assuming 'backgroundImages' is available in this scope.
@@ -1817,14 +1815,14 @@ const cleanPayload: {
 
   // Filter events for current display
   const getEventsForDisplay = () => {
-    if (currentView === "day") {
+    if (settings.currentView === "day") {
       return events.filter(
         (event) =>
           event.day === getCurrentDateInfo().day &&
           event.month === getCurrentDateInfo().month &&
           event.year === getCurrentDateInfo().year,
       )
-    } else if (currentView === "week") {
+    } else if (settings.currentView === "week") {
       return events.filter((event) =>
         weekDates.some(
           (weekDate) => event.day === weekDate.date && event.month === weekDate.month && event.year === weekDate.year,
@@ -1864,9 +1862,9 @@ const cleanPayload: {
 
   // Get display title based on current view
   const getDisplayTitle = () => {
-    if (currentView === "day") {
+    if (settings.currentView === "day") {
       return `${weekDays[currentDate.getDay()]}, ${monthNames[getCurrentDateInfo().month]} ${getCurrentDateInfo().day}, ${getCurrentDateInfo().year}`;
-    } else if (currentView === "week") {
+    } else if (settings.currentView === "week") {
       const startOfWeek = weekDates[0];
       const endOfWeek = weekDates[6];
       if (startOfWeek.month === endOfWeek.month) {
@@ -1881,7 +1879,7 @@ const cleanPayload: {
   };
 
   const handleTimeSlotMouseDown = (timeSlot: number, dayIndex: number | null = null) => {
-    if (currentView === "month") return // Don't allow dragging in month view
+    if (settings.currentView === "month") return // Don't allow dragging in month view
 
     setIsDragging(true)
     setDragStart({ time: timeSlot, day: dayIndex })
@@ -1919,9 +1917,9 @@ const cleanPayload: {
 
     // Determine the date
     let eventDate
-    if (currentView === "day") {
+    if (settings.currentView === "day") {
       eventDate = getCurrentDateInfo()
-    } else if (currentView === "week" && dragStart.day !== null) {
+    } else if (settings.currentView === "week" && dragStart.day !== null) {
       const weekDate = weekDates[dragStart.day]
       eventDate = { day: weekDate.date, month: weekDate.month, year: weekDate.year }
     } else {
@@ -2412,7 +2410,7 @@ const cleanPayload: {
                         <div
                           key={timeIndex}
                           className={`border-b cursor-pointer hover:bg-white/5 transition-colors ${
-                            isTimeSlotDragged(hour) && (dragStart?.day === dayIndex || currentView === "day")
+                            isTimeSlotDragged(hour) && (dragStart?.day === dayIndex || settings.currentView === "day")
                               ? "bg-blue-500/30 border-blue-400"
                               : ""
                           }`}
@@ -2861,11 +2859,11 @@ const cleanPayload: {
   }
 
   const handlePrevNavigation = () => {
-    if (currentView === "month") {
+    if (settings.currentView === "month") {
       const newDate = new Date(currentDate)
       newDate.setMonth(newDate.getMonth() - 1)
       setCurrentDate(newDate)
-    } else if (currentView === "week") {
+    } else if (settings.currentView === "week") {
       const newDate = new Date(currentDate)
       newDate.setDate(newDate.getDate() - 7)
       setCurrentDate(newDate)
@@ -2877,11 +2875,11 @@ const cleanPayload: {
   }
 
   const handleNextNavigation = () => {
-    if (currentView === "month") {
+    if (settings.currentView === "month") {
       const newDate = new Date(currentDate)
       newDate.setMonth(newDate.getMonth() + 1)
       setCurrentDate(newDate)
-    } else if (currentView === "week") {
+    } else if (settings.currentView === "week") {
       const newDate = new Date(currentDate)
       newDate.setDate(newDate.getDate() + 7)
       setCurrentDate(newDate)
@@ -2901,7 +2899,7 @@ const cleanPayload: {
     if (file) {
       const reader = new FileReader()
       reader.onloadend = () => {
-        setCustomBackgroundUrl(reader.result)
+        setNewEvent({ ...newEvent, customBackgroundUrl: reader.result })
         setBackgroundImage("custom")
       }
       reader.readAsDataURL(file)
@@ -3128,13 +3126,11 @@ const cleanPayload: {
   // Sync local state with settings context
   useEffect(() => {
     if (settings) {
-      setCurrentView(settings.currentView);
       setSelectedTimeZone(settings.selectedTimeZone);
       setCompactness(settings.compactness);
       setBackgroundOpacity(settings.backgroundOpacity);
       setBackgroundBlur(settings.backgroundBlur);
       setBackgroundImage(settings.backgroundImage);
-      setCustomBackgroundUrl(settings.customBackgroundUrl);
       setSidebarCollapsed(settings.sidebarCollapsed);
       setSidebarTab(settings.sidebarTab);
       setAllDayEventDisplay(settings.allDayEventDisplay);
@@ -3142,13 +3138,11 @@ const cleanPayload: {
       setSelectedCalendarForNewEvents(settings.selectedCalendarForNewEvents);
     }
   }, [
-    settings?.currentView,
     settings?.selectedTimeZone,
     settings?.compactness,
     settings?.backgroundOpacity,
     settings?.backgroundBlur,
     settings?.backgroundImage,
-    settings?.customBackgroundUrl,
     settings?.sidebarCollapsed,
     settings?.sidebarTab,
     settings?.allDayEventDisplay,
@@ -3160,13 +3154,11 @@ const cleanPayload: {
   useEffect(() => {
     if (user?.id) {
       updateSettings({
-        currentView,
         selectedTimeZone,
         compactness,
         backgroundOpacity,
         backgroundBlur,
         backgroundImage,
-        customBackgroundUrl,
         sidebarCollapsed,
         sidebarTab,
         allDayEventDisplay,
@@ -3176,13 +3168,11 @@ const cleanPayload: {
     }
   }, [
     user?.id,
-    currentView,
     selectedTimeZone,
     compactness,
     backgroundOpacity,
     backgroundBlur,
     backgroundImage,
-    customBackgroundUrl,
     sidebarCollapsed,
     sidebarTab,
     allDayEventDisplay,
@@ -3280,10 +3270,10 @@ const cleanPayload: {
   useEffect(() => {
     // 1. Determine the start and end dates of the current visible view.
     let viewStartDate: Date, viewEndDate: Date;
-    if (currentView === "day") {
+    if (settings.currentView === "day") {
       viewStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
       viewEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 23, 59, 59, 999);
-    } else if (currentView === "week") {
+    } else if (settings.currentView === "week") {
       const dayOfWeek = currentDate.getDay();
       viewStartDate = new Date(currentDate);
       viewStartDate.setDate(currentDate.getDate() - dayOfWeek);
@@ -3317,7 +3307,7 @@ const cleanPayload: {
         fetchEndDate.toISOString()
       );
     }
-  }, [currentDate, currentView, loadedRanges, user, googleCalendars]);
+  }, [currentDate, settings.currentView, loadedRanges, user, googleCalendars]);
 
   // Add this helper function inside the Home component in page.tsx
   const collectStateForSaving = () => {
@@ -3343,7 +3333,7 @@ const cleanPayload: {
     if (user?.id && !hasLoadedPersistedState) {
       const loadPersistedState = async () => {
         try {
-          const response = await fetch(`/api/settings?userId=${user.id}`);
+          const response = await fetch(`/api/user-settings?googleId=${user.id}`);
 
           if (response.ok) {
             const savedState = await response.json();
@@ -3399,6 +3389,37 @@ const cleanPayload: {
     };
   // Re-attach listener if key state changes to ensure the latest state is always saved.
   }, [user, settings, googleCalendars]); 
+
+  // Add this ref at the top of Home
+  const latestStateRef = useRef<any>();
+
+  // Add this useEffect to keep the ref updated with the latest state
+  useEffect(() => {
+    const calendarVisibility = googleCalendars.reduce((acc, cal) => {
+      acc[cal.id] = cal.visible;
+      return acc;
+    }, {} as Record<string, boolean>);
+    latestStateRef.current = {
+      user,
+      settings,
+      calendarVisibility,
+    };
+  }, [user, settings, googleCalendars]);
+
+  // Add this useEffect to set up the beforeunload listener ONCE
+  useEffect(() => {
+    const handleSaveStateOnExit = () => {
+      const stateToSave: any = latestStateRef.current;
+      if (!stateToSave?.user?.id) return;
+      const stateJSON = JSON.stringify(stateToSave);
+      const url = `/api/user-settings?googleId=${stateToSave.user.id}`;
+      navigator.sendBeacon(url, stateJSON);
+    };
+    window.addEventListener('beforeunload', handleSaveStateOnExit);
+    return () => {
+      window.removeEventListener('beforeunload', handleSaveStateOnExit);
+    };
+  }, []);
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
@@ -3780,7 +3801,7 @@ const cleanPayload: {
                 className="flex items-center gap-2 px-4 py-2 text-white bg-white/10 rounded-md hover:bg-white/20 transition-colors"
               >
                 <span>
-                  {currentView.charAt(0).toUpperCase() + currentView.slice(1)}
+                  {settings.currentView.charAt(0).toUpperCase() + settings.currentView.slice(1)}
                 </span>
                 <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showViewDropdown ? "rotate-180" : ""}`} />
               </button>
@@ -3791,11 +3812,11 @@ const cleanPayload: {
               <button
                         key={view}
                         onClick={() => {
-                          setCurrentView(view.toLowerCase());
+                          setNewEvent({ ...newEvent, source: view.toLowerCase() });
                           setShowViewDropdown(false);
                         }}
                         className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                          currentView === view.toLowerCase()
+                          settings.currentView === view.toLowerCase()
                             ? "bg-blue-500 text-white"
                             : "text-white/90 hover:bg-white/20"
                         }`}
@@ -3811,9 +3832,9 @@ const cleanPayload: {
 
           {/* Calendar Views */}
           <div className="flex-1 overflow-hidden">
-            {currentView === "day" && renderDayView()}
-            {currentView === "week" && renderWeekView()}
-            {currentView === "month" && renderMonthView()}
+            {settings.currentView === "day" && renderDayView()}
+            {settings.currentView === "week" && renderWeekView()}
+            {settings.currentView === "month" && renderMonthView()}
           </div>
         </div>
 
@@ -5011,8 +5032,8 @@ const cleanPayload: {
                         <div className="flex gap-2">
                           <input
                             type="url"
-                            value={customBackgroundUrl}
-                            onChange={(e) => setCustomBackgroundUrl(e.target.value)}
+                            value={newEvent.customBackgroundUrl}
+                            onChange={(e) => setNewEvent({ ...newEvent, customBackgroundUrl: e.target.value })}
                             className="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                             placeholder="Enter image URL"
                           />
