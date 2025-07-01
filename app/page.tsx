@@ -240,6 +240,9 @@ export default function Home() {
   const [showViewDropdown, setShowViewDropdown] = useState(false);
   const viewDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Add loadedRanges state at the top of Home component
+  const [loadedRanges, setLoadedRanges] = useState<{ start: Date; end: Date }[]>([]);
+
   const getCurrentDateInfo = () => {
     return {
       day: currentDate.getDate(),
@@ -791,6 +794,8 @@ export default function Home() {
   const fetchGoogleCalendarEvents = async (
     accessToken: string,
     calendarsToFetch?: GoogleCalendar[],
+    timeMin?: string,
+    timeMax?: string,
     forceSync = false,
   ) => {
     console.log("=== fetchGoogleCalendarEvents started ===");
@@ -813,17 +818,21 @@ export default function Home() {
       console.log("Calendars to sync:", calendarsToSync.length);
       console.log("Calendar details:", calendarsToSync);
 
-      // Calculate date range for events (1 month before and after current date)
-      const startDate = new Date(currentDate)
-      startDate.setMonth(startDate.getMonth() - 1)
-
-      const endDate = new Date(currentDate)
-      endDate.setMonth(endDate.getMonth() + 1)
-
-      const timeMin = startDate.toISOString()
-      const timeMax = endDate.toISOString()
+      // Use provided timeMin/timeMax, or fallback to 1 month before/after currentDate
+      let startDate: Date, endDate: Date;
+      if (timeMin && timeMax) {
+        startDate = new Date(timeMin);
+        endDate = new Date(timeMax);
+      } else {
+        startDate = new Date(currentDate)
+        startDate.setMonth(startDate.getMonth() - 1)
+        endDate = new Date(currentDate)
+        endDate.setMonth(endDate.getMonth() + 1)
+      }
+      const timeMinStr = startDate.toISOString();
+      const timeMaxStr = endDate.toISOString();
       
-      console.log("Date range for events:", { timeMin, timeMax });
+      console.log("Date range for events:", { timeMin: timeMinStr, timeMax: timeMaxStr });
 
       const allEvents: GoogleCalendarEvent[] = []
 
@@ -832,7 +841,7 @@ export default function Home() {
         try {
           console.log(`Fetching events for calendar: ${calendar.summary} (${calendar.id})`);
           const response = await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?timeMin=${timeMinStr}&timeMax=${timeMaxStr}&singleEvents=true&orderBy=startTime`,
             {
               headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -859,7 +868,17 @@ export default function Home() {
       }
 
       console.log("Total events fetched:", allEvents.length);
-      setGoogleCalendarEvents(allEvents)
+      // Merge new events with existing googleCalendarEvents (by id)
+      setGoogleCalendarEvents(prevEvents => {
+        const merged = [...prevEvents]
+        const existingIds = new Set(prevEvents.map(e => e.id))
+        for (const event of allEvents) {
+          if (!existingIds.has(event.id)) {
+            merged.push(event)
+          }
+        }
+        return merged
+      })
 
       // Convert Google Calendar events to our app's format and merge with local events
       console.log("Converting Google events to app format...");
@@ -870,11 +889,16 @@ export default function Home() {
       const localEvents = events.filter((event) => event.source === "local")
       console.log("Local events to keep:", localEvents.length);
 
-      // Merge local events with Google events
-      console.log("Merging events...");
-      setEvents([...localEvents, ...googleEvents])
+      // Merge local events with Google events (by id)
+      setEvents(prevEvents => {
+        const googleEventIds = new Set(googleEvents.map(e => e.id))
+        const filteredPrev = prevEvents.filter(e => e.source === "local" || !googleEventIds.has(e.id))
+        return [...filteredPrev, ...googleEvents]
+      })
       setLastSyncTime(new Date())
       setSyncStatus("synced")
+      // Add the loaded range to loadedRanges
+      setLoadedRanges(prev => mergeRanges([...prev, { start: startDate, end: endDate }]))
       console.log("=== fetchGoogleCalendarEvents completed successfully ===");
     } catch (error) {
       console.error("Error fetching Google Calendar events:", error)
@@ -3242,6 +3266,68 @@ export default function Home() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // Helper to merge overlapping/adjacent ranges
+  function mergeRanges(ranges: { start: Date; end: Date }[]): { start: Date; end: Date }[] {
+    if (ranges.length === 0) return [];
+    // Sort by start
+    const sorted = [...ranges].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const merged: { start: Date; end: Date }[] = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+      const last = merged[merged.length - 1];
+      const curr = sorted[i];
+      if (curr.start <= last.end) {
+        // Overlapping or adjacent
+        last.end = new Date(Math.max(last.end.getTime(), curr.end.getTime()));
+      } else {
+        merged.push(curr);
+      }
+    }
+    return merged;
+  }
+
+  // Smart Refresh useEffect
+  useEffect(() => {
+    // 1. Determine the start and end dates of the current visible view.
+    let viewStartDate: Date, viewEndDate: Date;
+    if (currentView === "day") {
+      viewStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+      viewEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 23, 59, 59, 999);
+    } else if (currentView === "week") {
+      const dayOfWeek = currentDate.getDay();
+      viewStartDate = new Date(currentDate);
+      viewStartDate.setDate(currentDate.getDate() - dayOfWeek);
+      viewStartDate.setHours(0, 0, 0, 0);
+      viewEndDate = new Date(viewStartDate);
+      viewEndDate.setDate(viewStartDate.getDate() + 6);
+      viewEndDate.setHours(23, 59, 59, 999);
+    } else {
+      // month view
+      viewStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      viewEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      viewEndDate.setHours(23, 59, 59, 999);
+    }
+    // 2. Check if this date range is already covered by our loadedRanges.
+    const isDataLoaded = loadedRanges.some(range =>
+      viewStartDate >= range.start && viewEndDate <= range.end
+    );
+    // 3. If data is NOT loaded, trigger a new fetch.
+    if (!isDataLoaded && user?.accessToken) {
+      console.log(`Data not loaded for ${viewStartDate.toISOString()} to ${viewEndDate.toISOString()}. Fetching...`);
+      // Fetch a larger chunk to create a buffer (e.g., 3 months around the new date).
+      const fetchStartDate = new Date(viewStartDate);
+      fetchStartDate.setMonth(fetchStartDate.getMonth() - 1);
+      const fetchEndDate = new Date(viewEndDate);
+      fetchEndDate.setMonth(fetchEndDate.getMonth() + 1);
+      // Call the refactored fetch function.
+      fetchGoogleCalendarEvents(
+        user.accessToken,
+        googleCalendars.filter(c => c.visible),
+        fetchStartDate.toISOString(),
+        fetchEndDate.toISOString()
+      );
+    }
+  }, [currentDate, currentView, loadedRanges, user, googleCalendars]);
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
