@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import Image from "next/image"
 import {
   ChevronLeft,
@@ -3420,6 +3420,21 @@ const cleanPayload: {
       window.removeEventListener('beforeunload', handleSaveStateOnExit);
     };
   }, []);
+
+  const {
+    isLoading,
+    error: syncError,
+    calendars: googleCalendars,
+    visibility,
+    toggleCalendarVisibility,
+    visibleEvents: googleCalendarEvents,
+    refreshData: handleRefreshCalendar
+  } = useSmartCalendarData(user);
+
+  const events = useMemo(() => {
+    const convertedGoogleEvents = convertGoogleEvents(googleCalendarEvents, googleCalendars);
+    return [...localEvents, ...convertedGoogleEvents];
+  }, [localEvents, googleCalendarEvents, googleCalendars]);
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">

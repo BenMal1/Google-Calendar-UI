@@ -56,93 +56,81 @@ export interface GoogleCalendarEvent {
 }
 
 export function useSmartCalendarData(user: GoogleUser | null) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
-  const [allEvents, setAllEvents] = useState<GoogleCalendarEvent[]>([]);
-  const [visibility, setVisibility] = useState<Record<string, boolean>>({});
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [allEvents, setAllEvents] = useState<GoogleCalendarEvent[]>([]);
+  const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
+  const [visibility, setVisibility] = useState<Record<string, boolean>>({});
 
-  // Fetch all calendars and all events for all calendars
-  const fetchAllData = useCallback(async () => {
-    if (!user?.accessToken) return;
+  const fetchAllData = useCallback(async (accessToken: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      // 1. Fetch all calendars
-      const calRes = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
-        headers: { Authorization: `Bearer ${user.accessToken}` },
+      const savedVisibilityJSON = localStorage.getItem("calendarVisibility");
+      const savedVisibility = savedVisibilityJSON ? JSON.parse(savedVisibilityJSON) : {};
+
+      const calResponse = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!calRes.ok) throw new Error("Failed to fetch calendars");
-      const calData = await calRes.json();
-      const userCalendars: GoogleCalendar[] = calData.items.map((cal: any) => ({
-        id: cal.id,
-        summary: cal.summary,
-        description: cal.description,
-        backgroundColor: cal.backgroundColor,
-        foregroundColor: cal.foregroundColor,
-        primary: cal.primary,
-        accessRole: cal.accessRole,
-        selected: cal.selected,
-        visible: true, // default to visible
-        colorId: cal.colorId,
+      if (!calResponse.ok) throw new Error("Failed to fetch calendar list.");
+      const calData = await calResponse.json();
+      
+      const fetchedCalendars: GoogleCalendar[] = calData.items.map((cal: any) => ({
+        id: cal.id, summary: cal.summary, backgroundColor: cal.backgroundColor, primary: cal.primary, selected: cal.selected
       }));
-      setCalendars(userCalendars);
-      // 2. Set initial visibility for all calendars to true
-      const initialVisibility = userCalendars.reduce((acc, cal) => {
-        acc[cal.id] = true;
+      setCalendars(fetchedCalendars);
+
+      const initialVisibility = fetchedCalendars.reduce((acc: Record<string, boolean>, cal: GoogleCalendar) => {
+        acc[cal.id] = savedVisibility[cal.id] !== undefined ? savedVisibility[cal.id] : (cal.primary || cal.selected || false);
         return acc;
-      }, {} as Record<string, boolean>);
+      }, {});
       setVisibility(initialVisibility);
-      // 3. Fetch events for ALL calendars concurrently
-      const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 2, 0);
-      const timeMin = startDate.toISOString();
-      const timeMax = endDate.toISOString();
-      const eventPromises = userCalendars.map((cal) =>
-        fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
-          { headers: { Authorization: `Bearer ${user.accessToken}` } }
-        )
-          .then((res) => (res.ok ? res.json() : { items: [] }))
-          .then((data) => (data.items || []).map((event: any) => ({ ...event, calendarId: cal.id })))
+      
+      const timeMin = new Date();
+      timeMin.setMonth(timeMin.getMonth() - 3);
+      const timeMax = new Date();
+      timeMax.setMonth(timeMax.getMonth() + 3);
+
+      const eventPromises = fetchedCalendars.map((calendar: GoogleCalendar) =>
+        fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?timeMin=${timeMin.toISOString()}&timeMax=${timeMax.toISOString()}&singleEvents=true&orderBy=startTime`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        .then(res => res.ok ? res.json() : Promise.resolve({ items: [] }))
+        .then(data => (data.items || []).map((event: any) => ({ ...event, calendarId: calendar.id })))
       );
-      const allEventsArr = (await Promise.all(eventPromises)).flat();
-      setAllEvents(allEventsArr);
+      
+      const eventsForAllCalendars = (await Promise.all(eventPromises)).flat();
+      setAllEvents(eventsForAllCalendars);
+
     } catch (err) {
-      setError("Could not load calendar data. Please try refreshing.");
+      setError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
-
-  useEffect(() => {
-    if (user?.accessToken) fetchAllData();
-  }, [user, fetchAllData]);
-
-  // Only update visibility state, no network
-  const toggleCalendarVisibility = useCallback((calendarId: string) => {
-    setVisibility((prev) => ({ ...prev, [calendarId]: !prev[calendarId] }));
   }, []);
 
-  // Memoized visible events
+  useEffect(() => {
+    if (user?.accessToken) {
+      fetchAllData(user.accessToken);
+    } else {
+      setIsLoading(false);
+    }
+  }, [user?.accessToken, fetchAllData]);
+
+  const toggleCalendarVisibility = useCallback((calendarId: string) => {
+    setVisibility(prev => {
+      const newVisibility = { ...prev, [calendarId]: !prev[calendarId] };
+      localStorage.setItem("calendarVisibility", JSON.stringify(newVisibility));
+      return newVisibility;
+    });
+  }, []);
+
   const visibleEvents = useMemo(() => {
-    return allEvents.filter((event) => visibility[event.calendarId]);
+    return allEvents.filter(event => visibility[event.calendarId]);
   }, [allEvents, visibility]);
 
-  // Manual refresh
-  const refreshCalendarData = useCallback(() => {
-    fetchAllData();
-  }, [fetchAllData]);
-
-  return {
-    isLoading,
-    calendars,
-    visibility,
-    toggleCalendarVisibility,
-    visibleEvents,
-    refreshCalendarData,
-    error,
-    setError,
+  return { 
+    isLoading, error, calendars, visibility, toggleCalendarVisibility, visibleEvents,
+    refreshData: () => user?.accessToken && fetchAllData(user.accessToken)
   };
 } 
