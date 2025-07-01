@@ -38,7 +38,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const BLOB_STORE_ID = 'tv4s94vxdmxjs44d';
+    const BLOB_STORE_ID = process.env.NEXT_PUBLIC_BLOB_STORE_ID;
     const pathname = `settings/${userId}-settings.json`;
     const blobUrl = `https://${BLOB_STORE_ID}.public.blob.vercel-storage.com/${pathname}`;
     const response = await fetch(blobUrl, { next: { revalidate: 0 } }); // No caching
