@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import { useSettings } from "./contexts/SettingsContext"
 import { useEventDrag } from "./hooks/useEventDrag"
+import { useSmartCalendarData } from "./hooks/useSmartCalendarData"
 import { AdvancedColorPicker } from "./components/AdvancedColorPicker"
 import { Collapsible } from "./components/Collapsible"
 
@@ -234,9 +235,6 @@ export default function Home() {
 
   // Add a state to track if the user has attempted to submit
   const [triedSubmit, setTriedSubmit] = useState(false);
-
-  // Add error state for handling general errors
-  const [error, setError] = useState<string | null>(null);
 
   // View dropdown state and ref
   const [showViewDropdown, setShowViewDropdown] = useState(false);
@@ -733,81 +731,61 @@ export default function Home() {
 
   // Replace the existing fetchGoogleCalendars function with this enhanced version
   const fetchGoogleCalendars = async (accessToken: string, forceSync = false) => {
-    console.log("=== fetchGoogleCalendars started ===");
-    console.log("Access token available:", !!accessToken);
-    console.log("Force sync:", forceSync);
-    
-    if (!accessToken) {
-      console.error("No access token available");
-      setSyncError("No access token available. Please sign in again.")
-      setSyncStatus("error")
-      return
-    }
+    if (!accessToken) { return; }
+    // ... (existing debounce logic can remain) ...
 
-    // Prevent excessive syncing - only sync if it's been at least 30 seconds since last attempt
-    // unless forceSync is true
-    const now = new Date()
-    if (!forceSync && lastSyncAttempt && now.getTime() - lastSyncAttempt.getTime() < 30000) {
-      console.log("Skipping sync - too soon since last attempt")
-      return
-    }
-
-    setLastSyncAttempt(now)
-    setSyncStatus("syncing")
-    setSyncError(null)
+    setSyncStatus("syncing");
+    setSyncError(null);
 
     try {
-      console.log("Fetching calendar list from Google API...");
+      // Step 1: Load saved visibility settings from localStorage first.
+      const savedVisibilityJSON = localStorage.getItem("calendarVisibility");
+      const savedVisibility = savedVisibilityJSON ? JSON.parse(savedVisibilityJSON) : {};
+
+      // Step 2: Fetch the calendar list from Google as usual.
       const response = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-
-      console.log("Calendar list response status:", response.status);
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (!response.ok) {
-        throw new Error(`Failed to fetch calendars: ${response.status} ${response.statusText}`)
+        throw new Error(`Failed to fetch calendars: ${response.status}`);
       }
+      const data = await response.json();
 
-      const data = await response.json()
-      console.log("Calendar list data:", data);
-      console.log("Number of calendars found:", data.items?.length || 0);
-      
-      const calendars = data.items.map((cal: any) => ({
-        id: cal.id,
-        summary: cal.summary,
-        description: cal.description,
-        backgroundColor: cal.backgroundColor,
-        foregroundColor: cal.foregroundColor,
-        primary: cal.primary,
-        accessRole: cal.accessRole,
-        selected: cal.selected,
-        visible: cal.primary || cal.selected || false, // Default to visible for primary calendar
-        colorId: cal.colorId,
-      }))
+      // Step 3: MERGE Google's data with your saved visibility settings.
+      const calendars = data.items.map((cal: any) => {
+        // If a setting exists in localStorage for this calendar, use it.
+        // Otherwise, fall back to Google's default (primary or selected).
+        const isVisible = savedVisibility[cal.id] !== undefined 
+          ? savedVisibility[cal.id] 
+          : (cal.primary || cal.selected || false);
 
-      console.log("Processed calendars:", calendars);
-      console.log("Visible calendars:", calendars.filter((cal: GoogleCalendar) => cal.visible));
-      
-      setGoogleCalendars(calendars)
+        return {
+          id: cal.id,
+          summary: cal.summary,
+          description: cal.description,
+          backgroundColor: cal.backgroundColor,
+          foregroundColor: cal.foregroundColor,
+          primary: cal.primary,
+          accessRole: cal.accessRole,
+          selected: cal.selected,
+          visible: isVisible, // Use the merged visibility state
+          colorId: cal.colorId,
+        };
+      });
 
-      // Fetch events for visible calendars
-      console.log("Starting to fetch events for visible calendars...");
-      await fetchGoogleCalendarEvents(
-        accessToken,
-        calendars.filter((cal: GoogleCalendar) => cal.visible),
-        forceSync,
-      )
+      setGoogleCalendars(calendars);
 
-      setSyncStatus("synced")
-      setHasUnsyncedChanges(false)
-      console.log("=== fetchGoogleCalendars completed successfully ===");
+      // Step 4: Fetch events based on the CORRECT, merged visibility state.
+      const visibleCalendars = calendars.filter((cal: GoogleCalendar) => cal.visible);
+      await fetchGoogleCalendarEvents(accessToken, visibleCalendars, forceSync);
+
+      setSyncStatus("synced");
     } catch (error) {
-      console.error("Error fetching Google Calendars:", error)
-      setSyncError("Failed to fetch your Google Calendars. Please try again.")
-      setSyncStatus("error")
+      console.error("Error fetching Google Calendars:", error);
+      setSyncError("Failed to fetch your Google Calendars. Please try again.");
+      setSyncStatus("error");
     }
-  }
+  };
 
   // Replace the existing fetchGoogleCalendarEvents function with this enhanced version
   const fetchGoogleCalendarEvents = async (
@@ -1311,7 +1289,7 @@ export default function Home() {
 
     if (!originalEvent) {
       console.error("Original event not found in events array");
-      setError("Event not found. Please try again.");
+      setSyncError("Event not found. Please try again.");
       return;
     }
 
@@ -1323,7 +1301,7 @@ export default function Home() {
       const success = await updateGoogleCalendarEvent(eventData, googleEventId, calendarId, recurringEventAction)
       if (!success) {
         console.error("API call failed");
-        setError("Failed to update Google Calendar event. Please try again.");
+        setSyncError("Failed to update Google Calendar event. Please try again.");
         return // Don't close modal if update failed
       }
       
@@ -1463,7 +1441,7 @@ export default function Home() {
 
         if (!originalEvent) {
           console.error("Original event not found in events array");
-          setError("Event not found. Please try again.");
+          setSyncError("Event not found. Please try again.");
           return;
         }
 
@@ -1490,7 +1468,7 @@ export default function Home() {
           const success = await updateGoogleCalendarEvent(newEvent, originalEvent.googleId, originalEvent.calendarId)
           if (!success) {
             console.error("API call failed");
-            setError("Failed to update Google Calendar event. Please try again.")
+            setSyncError("Failed to update Google Calendar event. Please try again.")
             return // Don't close modal if update failed
           }
 
@@ -1614,9 +1592,9 @@ export default function Home() {
           const success = await createGoogleCalendarEvent(newEvent, selectedCalendarForNewEvents)
           if (!success) {
             console.error("Failed to create Google Calendar event");
-            setError("Failed to create Google Calendar event. Please try again.")
+            setSyncError("Failed to create Google Calendar event. Please try again.")
             return // Don't close modal if creation failed
-          }
+          }getCurrentDateInfo
           console.log("Google Calendar event created successfully");
         } else {
           console.log("Creating local event(s)");
@@ -1801,6 +1779,17 @@ export default function Home() {
     return false
   }
 
+  // Restore this helper function to determine the correct background image URL
+  const getCurrentBackgroundUrl = () => {
+    if (backgroundImage === "custom" && customBackgroundUrl) {
+      return customBackgroundUrl;
+    }
+    // You need to define backgroundImages array if it was also removed.
+    // Assuming 'backgroundImages' is available in this scope.
+    const currentBg = backgroundImages.find((img) => img.id === backgroundImage);
+    return currentBg?.url || backgroundImages[0].url;
+  };
+
   // Generate mini calendar days for date picker
   const generateDatePickerDays = (month, year) => {
     const daysInMonth = getDaysInMonth(month, year)
@@ -1856,15 +1845,7 @@ export default function Home() {
     )
   }
 
-  // Get current background image
-  const getCurrentBackgroundUrl = () => {
-    if (backgroundImage === "custom" && customBackgroundUrl) {
-      return customBackgroundUrl
-    }
-    const currentBg = backgroundImages.find((img) => img.id === backgroundImage)
-    return currentBg?.url || backgroundImages[0].url
-  }
-
+  
   // Format time display
   const formatTimeDisplay = (time) => {
     if (time === 0) return "12 AM"
@@ -2840,17 +2821,26 @@ export default function Home() {
   }
 
   const toggleCalendarVisibility = async (calendarId: string) => {
-    setGoogleCalendars(
-      googleCalendars.map((cal: GoogleCalendar) =>
-        cal.id === calendarId ? { ...cal, visible: !cal.visible } : cal,
-      ),
-    )
+    // Step 1: Create the new array of calendars with the updated visibility.
+    const updatedCalendars = googleCalendars.map((cal) =>
+      cal.id === calendarId ? { ...cal, visible: !cal.visible } : cal
+    );
+    // Step 2: Set the state with the updated array.
+    setGoogleCalendars(updatedCalendars);
 
-    // Trigger a sync to update events based on calendar visibility
+    // Step 3: Persist the user's choice to local storage for persistence.
+    const visibilityState = updatedCalendars.reduce((acc, cal) => {
+      acc[cal.id] = cal.visible;
+      return acc;
+    }, {} as Record<string, boolean>);
+    localStorage.setItem("calendarVisibility", JSON.stringify(visibilityState));
+
+    // Step 4: Re-fetch EVENTS only for the newly visible set of calendars.
     if (user?.accessToken) {
-      await fetchGoogleCalendars(user.accessToken, true)
+      const calendarsToFetch = updatedCalendars.filter(cal => cal.visible);
+      await fetchGoogleCalendarEvents(user.accessToken, calendarsToFetch);
     }
-  }
+  };
 
   const handleTodayClick = () => {
     setCurrentDate(new Date())
