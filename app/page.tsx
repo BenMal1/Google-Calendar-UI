@@ -184,15 +184,15 @@ export default function Home() {
   const [selectedCalendarForNewEvents, setSelectedCalendarForNewEvents] = useState(settings?.selectedCalendarForNewEvents || "primary")
 
   const [isDragging, setIsDragging] = useState(false)
-  const [dragStart, setDragStart] = useState(null)
-  const [dragEnd, setDragEnd] = useState(null)
-  const [draggedTimeSlots, setDraggedTimeSlots] = useState([])
+  const [dragStart, setDragStart] = useState<{ time: number; day: number | null } | null>(null)
+  const [dragEnd, setDragEnd] = useState<{ time: number; day: number | null } | null>(null)
+  const [draggedTimeSlots, setDraggedTimeSlots] = useState<number[]>([])
   const [isCreatingEvent, setIsCreatingEvent] = useState(false)
 
   // Recurring event confirmation dialog state
   const [showRecurringDialog, setShowRecurringDialog] = useState(false)
   const [recurringEventAction, setRecurringEventAction] = useState<"this" | "future" | "all">("this")
-  const [pendingEventUpdate, setPendingEventUpdate] = useState(null)
+  const [pendingEventUpdate, setPendingEventUpdate] = useState<{ eventData: CalendarEvent; googleEventId: string; calendarId: string } | null>(null)
 
   // Google Auth state
   const [user, setUser] = useState<GoogleUser | null>(null)
@@ -214,7 +214,7 @@ export default function Home() {
   // Initialize with current date
   const today = new Date()
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedEvent, setSelectedEvent] = useState(null)
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
 
   const [timelineCurrentTime, setTimelineCurrentTime] = useState(new Date())
@@ -280,7 +280,7 @@ export default function Home() {
   ]
 
   // Location autocomplete state
-  const [locationSuggestions, setLocationSuggestions] = useState([])
+  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([])
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false)
 
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -869,33 +869,17 @@ export default function Home() {
       }
 
       console.log("Total events fetched:", allEvents.length);
-      // Merge new events with existing googleCalendarEvents (by id)
-      setGoogleCalendarEvents(prevEvents => {
-        const merged = [...prevEvents]
-        const existingIds = new Set(prevEvents.map(e => e.id))
-        for (const event of allEvents) {
-          if (!existingIds.has(event.id)) {
-            merged.push(event)
-          }
-        }
-        return merged
-      })
+      // Replace the faulty merge logic with a direct replacement
+      setGoogleCalendarEvents(allEvents);
 
       // Convert Google Calendar events to our app's format and merge with local events
       console.log("Converting Google events to app format...");
       const googleEvents = convertGoogleEvents(allEvents)
       console.log("Converted events:", googleEvents.length);
 
-      // Filter out local events (keep only those with source: "local")
-      const localEvents = events.filter((event) => event.source === "local")
-      console.log("Local events to keep:", localEvents.length);
-
-      // Merge local events with Google events (by id)
-      setEvents(prevEvents => {
-        const googleEventIds = new Set(googleEvents.map(e => e.id))
-        const filteredPrev = prevEvents.filter(e => e.source === "local" || !googleEventIds.has(e.id))
-        return [...filteredPrev, ...googleEvents]
-      })
+      // Replace the faulty merge logic with a direct replacement
+      const localEvents = events.filter((event) => event.source === "local");
+      setEvents([...localEvents, ...googleEvents]);
       setLastSyncTime(new Date())
       setSyncStatus("synced")
       // Add the loaded range to loadedRanges (merge with existing)
@@ -1420,6 +1404,7 @@ const cleanPayload: {
         description: "",
         location: "",
         color: "bg-blue-600",
+        exactColor: null,
         day: currentDateInfo.day,
         month: currentDateInfo.month,
         year: currentDateInfo.year,
@@ -1474,9 +1459,9 @@ const cleanPayload: {
         if (originalEvent.isRecurring && originalEvent.source === "google") {
           console.log("Recurring Google Calendar event detected, showing confirmation dialog");
           setPendingEventUpdate({
-            eventData: newEvent,
-            googleEventId: originalEvent.googleId,
-            calendarId: originalEvent.calendarId,
+            eventData: { ...newEvent, id: originalEvent.id, attendees: originalEvent.attendees, organizer: originalEvent.organizer, source: originalEvent.source },
+            googleEventId: originalEvent.googleId || '',
+            calendarId: originalEvent.calendarId || '',
           })
           setShowRecurringDialog(true)
           return // Don't proceed with save until user confirms
@@ -1550,13 +1535,13 @@ const cleanPayload: {
                 const filteredEvents = prevEvents.filter(event => event.id !== editingEventId)
                 
                 // Create base event for recurring series
-                const baseEvent = {
+                const baseEvent: CalendarEvent = {
                   ...newEvent,
-                  id: Date.now(), // New ID for the series
+                  id: `${Date.now()}`,
                   attendees: originalEvent.attendees,
                   organizer: originalEvent.organizer,
                   source: "local",
-                  exactColor: newEvent.exactColor || null,
+                  exactColor: newEvent.exactColor ?? null,
                 }
                 
                 // Generate recurring events
@@ -1650,6 +1635,7 @@ const cleanPayload: {
         description: "",
         location: "",
         color: "bg-blue-600",
+        exactColor: null,
         day: currentDateInfo.day,
         month: currentDateInfo.month,
         year: currentDateInfo.year,
@@ -1688,23 +1674,24 @@ const cleanPayload: {
     }
   }
 
-  const handleDateSelect = (day, month, year) => {
-    setNewEvent({ ...newEvent, day, month, year })
+  const handleDateSelect = (day: number, month: number, year: number) => {
+    setNewEvent({ ...newEvent, day, month, year, exactColor: newEvent.exactColor ?? null })
     setShowDatePicker(false)
   }
 
-  const handleEndDateSelect = (day, month, year) => {
-    setNewEvent({ ...newEvent, endDay: day, endMonth: month, endYear: year })
+  const handleEndDateSelect = (day: number, month: number, year: number) => {
+    setNewEvent({ ...newEvent, endDay: day, endMonth: month, endYear: year, exactColor: newEvent.exactColor ?? null })
     setShowEndDatePicker(false)
   }
 
-  const handleRecurrenceEndDateSelect = (day, month, year) => {
+  const handleRecurrenceEndDateSelect = (day: number, month: number, year: number) => {
     setNewEvent({
       ...newEvent,
       recurrence: {
         ...newEvent.recurrence,
         endDate: new Date(year, month, day),
       },
+      exactColor: newEvent.exactColor ?? null,
     })
     setShowRecurrenceEndDatePicker(false)
   }
@@ -1854,7 +1841,7 @@ const cleanPayload: {
     }
   }
 
-  const isCurrentDay = (day) => {
+  const isCurrentDay = (day: number) => {
     const today = new Date()
     return (
       day === today.getDate() &&
@@ -1863,7 +1850,7 @@ const cleanPayload: {
     )
   }
 
-  const isCurrentWeekDay = (weekDate) => {
+  const isCurrentWeekDay = (weekDate: { date: number; month: number; year: number }) => {
     const today = new Date()
     return (
       weekDate.date === today.getDate() && weekDate.month === today.getMonth() && weekDate.year === today.getFullYear()
@@ -1872,7 +1859,7 @@ const cleanPayload: {
 
 
   // Format time display
-  const formatTimeDisplay = (time) => {
+  const formatTimeDisplay = (time: number) => {
     if (time === 0) return "12 AM"
     if (time < 12) return `${time} AM`
     if (time === 12) return "12 PM"
@@ -1897,7 +1884,7 @@ const cleanPayload: {
     }
   };
 
-  const handleTimeSlotMouseDown = (timeSlot, dayIndex = null) => {
+  const handleTimeSlotMouseDown = (timeSlot: number, dayIndex: number | null = null) => {
     if (currentView === "month") return // Don't allow dragging in month view
 
     setIsDragging(true)
@@ -1906,15 +1893,16 @@ const cleanPayload: {
     setDraggedTimeSlots([timeSlot])
   }
 
-  const handleTimeSlotMouseEnter = (timeSlot, dayIndex = null) => {
+  const handleTimeSlotMouseEnter = (timeSlot: number, dayIndex: number | null = null) => {
     if (!isDragging) return
 
     setDragEnd({ time: timeSlot, day: dayIndex })
 
     // Calculate dragged time slots
+    if (!dragStart) return;
     const startTime = Math.min(dragStart.time, timeSlot)
     const endTime = Math.max(dragStart.time, timeSlot)
-    const slots = []
+    const slots: number[] = []
     for (let i = startTime; i <= endTime; i++) {
       slots.push(i)
     }
@@ -1952,6 +1940,7 @@ const cleanPayload: {
       description: "",
       location: "",
       color: "bg-blue-600",
+      exactColor: null,
       day: eventDate.day,
       month: eventDate.month,
       year: eventDate.year,
@@ -1979,7 +1968,7 @@ const cleanPayload: {
     setDraggedTimeSlots([])
   }
 
-  const isTimeSlotDragged = (timeSlot) => {
+  const isTimeSlotDragged = (timeSlot: number) => {
     return draggedTimeSlots.includes(timeSlot)
   }
 
@@ -2034,19 +2023,21 @@ const cleanPayload: {
   }
 
   // Helper function to calculate event position and height
-  const calculateEventStyleFn = (startTime, endTime, events = [], targetEvent = null) => {
+  const calculateEventStyleFn = (
+    startTime: string,
+    endTime: string,
+    events: CalendarEvent[] = [],
+    targetEvent: CalendarEvent | null = null
+  ) => {
     const start = Number.parseInt(startTime.split(":")[0]) + Number.parseInt(startTime.split(":")[1]) / 60
     const end = Number.parseInt(endTime.split(":")[0]) + Number.parseInt(endTime.split(":")[1]) / 60
     const slotHeight = getSlotHeight()
     const top = start * slotHeight
     const height = (end - start) * slotHeight
-
     let positioning = { width: "100%", left: "0%", zIndex: 20 }
-
     if (targetEvent && events.length > 0) {
       positioning = calculateEventPositioning(events, targetEvent)
     }
-
     return {
       top: `${top}px`,
       height: `${height}px`,
@@ -2734,6 +2725,7 @@ const cleanPayload: {
       description: "",
       location: "",
       color: "bg-blue-600",
+      exactColor: null,
       day: currentDateTime.day,
       month: currentDateTime.month,
       year: currentDateTime.year,
@@ -2824,6 +2816,7 @@ const cleanPayload: {
       description: "",
       location: "",
       color: "bg-blue-600",
+      exactColor: null,
       day: currentDateTime.day,
       month: currentDateTime.month,
       year: currentDateTime.year,
@@ -2919,7 +2912,7 @@ const cleanPayload: {
     }
   }
 
-  const handleLocationChange = (value) => {
+  const handleLocationChange = (value: string) => {
     setNewEvent({ ...newEvent, location: value })
 
     // Basic location suggestion - replace with API call for real data
@@ -2933,13 +2926,13 @@ const cleanPayload: {
     }
   }
 
-  const handleLocationSelect = (location) => {
+  const handleLocationSelect = (location: string) => {
     setNewEvent({ ...newEvent, location })
     setLocationSuggestions([])
     setShowLocationSuggestions(false)
   }
 
-  const getGoogleMapsUrl = (location) => {
+  const getGoogleMapsUrl = (location: string) => {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`
   }
 
@@ -2978,7 +2971,7 @@ const cleanPayload: {
     setShowCreateModal(true)
   }
 
-  const handleEventClick = (event) => {
+  const handleEventClick = (event: CalendarEvent) => {
     setSelectedEvent(event)
   }
 
