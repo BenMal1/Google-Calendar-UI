@@ -582,11 +582,7 @@ export default function Home() {
           try {
             const parsedUser = JSON.parse(savedUser);
             setUser(parsedUser);
-
-            // If we have a saved access token, fetch calendars and events
-            if (parsedUser.accessToken) {
-              fetchGoogleCalendars(parsedUser.accessToken);
-            }
+            // The automatic fetch call has been removed.
           } catch (error) {
             console.error("Error parsing saved user:", error);
             localStorage.removeItem("calendar_user");
