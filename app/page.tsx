@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useReducer } from "react"
 import Image from "next/image"
 import {
   ChevronLeft,
@@ -157,6 +157,110 @@ function isValidColor(color: string | undefined | null): boolean {
   );
 }
 
+// Action types for newEvent reducer
+type NewEventAction =
+  | { type: 'SET_TITLE'; payload: string }
+  | { type: 'SET_START_TIME'; payload: string }
+  | { type: 'SET_END_TIME'; payload: string }
+  | { type: 'SET_DESCRIPTION'; payload: string }
+  | { type: 'SET_LOCATION'; payload: string }
+  | { type: 'SET_COLOR'; payload: { color: string; exactColor: string | null } }
+  | { type: 'SET_DAY'; payload: { day: number; month: number; year: number } }
+  | { type: 'SET_END_DAY'; payload: { day: number; month: number; year: number } }
+  | { type: 'SET_ALL_DAY'; payload: boolean }
+  | { type: 'SET_MULTI_DAY'; payload: boolean }
+  | { type: 'SET_RECURRING'; payload: boolean }
+  | { type: 'SET_RECURRENCE'; payload: any }
+  | { type: 'SET_RECURRENCE_END_DATE'; payload: Date }
+  | { type: 'SET_CUSTOM_BACKGROUND_URL'; payload: string }
+  | { type: 'SET_SOURCE'; payload: string }
+  | { type: 'RESET_FORM'; payload?: any }
+  | { type: 'SET_FROM_EVENT'; payload: any }
+
+// Reducer function for newEvent state
+const newEventReducer = (state: any, action: NewEventAction) => {
+  switch (action.type) {
+    case 'SET_TITLE':
+      return { ...state, title: action.payload }
+    case 'SET_START_TIME':
+      return { ...state, startTime: action.payload }
+    case 'SET_END_TIME':
+      return { ...state, endTime: action.payload }
+    case 'SET_DESCRIPTION':
+      return { ...state, description: action.payload }
+    case 'SET_LOCATION':
+      return { ...state, location: action.payload }
+    case 'SET_COLOR':
+      return { ...state, color: action.payload.color, exactColor: action.payload.exactColor }
+    case 'SET_DAY':
+      return { ...state, day: action.payload.day, month: action.payload.month, year: action.payload.year }
+    case 'SET_END_DAY':
+      return { ...state, endDay: action.payload.day, endMonth: action.payload.month, endYear: action.payload.year }
+    case 'SET_ALL_DAY':
+      return { 
+        ...state, 
+        isAllDay: action.payload,
+        startTime: action.payload ? "00:00" : "09:00",
+        endTime: action.payload ? "23:59" : "10:00"
+      }
+    case 'SET_MULTI_DAY':
+      return { 
+        ...state, 
+        isMultiDay: action.payload,
+        endDay: action.payload ? state.day : state.day,
+        endMonth: action.payload ? state.month : state.month,
+        endYear: action.payload ? state.year : state.year
+      }
+    case 'SET_RECURRING':
+      return { ...state, isRecurring: action.payload }
+    case 'SET_RECURRENCE':
+      return { ...state, recurrence: action.payload }
+    case 'SET_RECURRENCE_END_DATE':
+      return { 
+        ...state, 
+        recurrence: {
+          ...state.recurrence,
+          endDate: action.payload
+        }
+      }
+    case 'SET_CUSTOM_BACKGROUND_URL':
+      return { ...state, customBackgroundUrl: action.payload }
+    case 'SET_SOURCE':
+      return { ...state, source: action.payload }
+    case 'RESET_FORM':
+      return action.payload || {
+        title: "",
+        startTime: "09:00",
+        endTime: "10:00",
+        description: "",
+        location: "",
+        color: "bg-blue-600",
+        exactColor: null,
+        day: new Date().getDate(),
+        month: new Date().getMonth(),
+        year: new Date().getFullYear(),
+        isAllDay: false,
+        isMultiDay: false,
+        endDay: new Date().getDate(),
+        endMonth: new Date().getMonth(),
+        endYear: new Date().getFullYear(),
+        isRecurring: false,
+        recurrence: {
+          frequency: "weekly" as const,
+          interval: 1,
+          daysOfWeek: [new Date().getDay()],
+          endType: "never" as const,
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          count: 10,
+        },
+      }
+    case 'SET_FROM_EVENT':
+      return { ...state, ...action.payload }
+    default:
+      return state
+  }
+}
+
 export default function Home() {
   // Settings context
   const { settings, updateSettings, loadSettings, addRecentColor } = useSettings()
@@ -170,6 +274,7 @@ export default function Home() {
   const [editingEventId, setEditingEventId] = useState(null)
   
   // Use settings from context, fallback to defaults
+  const [events, setEvents] = useState<CalendarEvent[]>([])
   const [selectedTimeZone, setSelectedTimeZone] = useState(settings?.selectedTimeZone || "America/New_York")
   const [compactness, setCompactness] = useState(settings?.compactness || 50)
   const [backgroundOpacity, setBackgroundOpacity] = useState(settings?.backgroundOpacity || 40)
@@ -241,6 +346,7 @@ export default function Home() {
   // Add loadedRanges state at the top of Home component
   const [loadedRanges, setLoadedRanges] = useState<{ start: Date; end: Date }[]>([]);
 
+  
   const getCurrentDateInfo = () => {
     return {
       day: currentDate.getDate(),
@@ -281,8 +387,7 @@ export default function Home() {
   const [locationSuggestions, setLocationSuggestions] = useState<string[]>([])
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false)
 
-  const [events, setEvents] = useState<CalendarEvent[]>([])
-
+ 
   // Helper function to round time to nearest hour
   const roundToNearestHour = (): string => {
     const now = new Date()
@@ -321,18 +426,19 @@ export default function Home() {
     if (isStartTime) {
       if (!isEditMode && !hasSetStartTime) {
         const newEndTime = addOneHour(time);
-        setNewEvent({ ...newEvent, startTime: time, endTime: newEndTime });
+        dispatchNewEvent({ type: 'SET_START_TIME', payload: time });
+        dispatchNewEvent({ type: 'SET_END_TIME', payload: newEndTime });
         setHasSetStartTime(true);
       } else {
-        setNewEvent({ ...newEvent, startTime: time });
+        dispatchNewEvent({ type: 'SET_START_TIME', payload: time });
       }
     } else {
-      setNewEvent({ ...newEvent, endTime: time });
+      dispatchNewEvent({ type: 'SET_END_TIME', payload: time });
     }
   }
 
   const currentDateTime = getCurrentDateTime()
-  const [newEvent, setNewEvent] = useState({
+  const [newEvent, dispatchNewEvent] = useReducer(newEventReducer, {
     title: "",
     startTime: currentDateTime.startTime,
     endTime: currentDateTime.endTime,
@@ -395,22 +501,7 @@ export default function Home() {
     },
   ]
 
-  // Sample location suggestions
-  const sampleLocations = [
-    "Conference Room A, 123 Business St, New York, NY",
-    "Conference Room B, 123 Business St, New York, NY",
-    "Cafe Nero, 456 Coffee Ave, New York, NY",
-    "Starbucks, 789 Main St, New York, NY",
-    "Central Park, New York, NY",
-    "Times Square, New York, NY",
-    "Empire State Building, New York, NY",
-    "Brooklyn Bridge, New York, NY",
-    "Meeting Room 1, 321 Corporate Blvd, New York, NY",
-    "Meeting Room 2, 321 Corporate Blvd, New York, NY",
-    "Creative Space, 321 Innovation Dr, San Francisco, CA",
-    "Google Headquarters, Mountain View, CA",
-    "Apple Park, Cupertino, CA",
-  ]
+
 
   // Time zones
   const timeZones = [
@@ -783,8 +874,7 @@ export default function Home() {
       setSyncStatus("error");
     }
   };
-
-  // Replace the existing fetchGoogleCalendarEvents function with this enhanced version
+  // ⬇️ REPLACE the entire fetchGoogleCalendarEvents function with this new version.
   const fetchGoogleCalendarEvents = async (
     accessToken: string,
     calendarsToFetch?: GoogleCalendar[],
@@ -793,100 +883,109 @@ export default function Home() {
     forceSync = false,
   ) => {
     console.log("=== fetchGoogleCalendarEvents started ===");
-    console.log("Access token available:", !!accessToken);
-    console.log("Calendars to fetch:", calendarsToFetch?.length || 0);
-    console.log("Force sync:", forceSync);
-    
     if (!accessToken) {
       console.error("No access token available for events");
-      setSyncError("No access token available. Please sign in again.")
-      setSyncStatus("error")
-      return
+      setSyncError("No access token available. Please sign in again.");
+      setSyncStatus("error");
+      return;
     }
 
-    setIsLoadingEvents(true)
-    setSyncError(null)
+    setIsLoadingEvents(true);
+    setSyncError(null);
 
     try {
-      const calendarsToSync = calendarsToFetch || googleCalendars.filter((cal) => cal.visible)
-      console.log("Calendars to sync:", calendarsToSync.length);
-      console.log("Calendar details:", calendarsToSync);
+      const calendarsToSync = calendarsToFetch || googleCalendars.filter((cal) => cal.visible);
 
-      // Use provided timeMin/timeMax, or fallback to 1 month before/after currentDate
+      // Default to the current view's date range if none is provided
       let startDate: Date, endDate: Date;
       if (timeMin && timeMax) {
         startDate = new Date(timeMin);
         endDate = new Date(timeMax);
       } else {
-        // If not provided, default to current month
-        startDate = new Date(currentDate)
-        startDate.setMonth(startDate.getMonth() - 1)
-        endDate = new Date(currentDate)
-        endDate.setMonth(endDate.getMonth() + 1)
+        startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
       }
       const timeMinStr = startDate.toISOString();
       const timeMaxStr = endDate.toISOString();
 
-      console.log("Date range for events:", { timeMin: timeMinStr, timeMax: timeMaxStr });
+      console.log("Date range for event fetch:", { timeMin: timeMinStr, timeMax: timeMaxStr });
 
-      const allEvents: GoogleCalendarEvent[] = []
+      const newFetchedEvents: GoogleCalendarEvent[] = [];
 
-      // Fetch events from each visible calendar
       for (const calendar of calendarsToSync) {
         try {
           console.log(`Fetching events for calendar: ${calendar.summary} (${calendar.id})`);
           const response = await fetch(
             `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?timeMin=${timeMinStr}&timeMax=${timeMaxStr}&singleEvents=true&orderBy=startTime`,
             {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-              },
+              headers: { Authorization: `Bearer ${accessToken}` },
             },
-          )
+          );
 
-          console.log(`Response for ${calendar.summary}:`, response.status);
           if (response.ok) {
-            const data = await response.json()
-            console.log(`Events for ${calendar.summary}:`, data.items?.length || 0);
+            const data = await response.json();
             const calendarEvents = data.items.map((event: any) => ({
               ...event,
               calendarId: calendar.id,
               calendarColor: calendar.backgroundColor,
-            }))
-            allEvents.push(...calendarEvents)
+            }));
+            newFetchedEvents.push(...calendarEvents);
           } else {
             console.error(`Failed to fetch events for ${calendar.summary}:`, response.status, response.statusText);
           }
         } catch (error) {
-          console.error(`Error fetching events for calendar ${calendar.summary}:`, error)
+          console.error(`Error fetching events for calendar ${calendar.summary}:`, error);
         }
       }
 
-      console.log("Total events fetched:", allEvents.length);
-      // Replace the faulty merge logic with a direct replacement
-      setGoogleCalendarEvents(allEvents);
+      console.log("Total new events fetched:", newFetchedEvents.length);
 
-      // Convert Google Calendar events to our app's format and merge with local events
-      console.log("Converting Google events to app format...");
-      const googleEvents = convertGoogleEvents(allEvents)
-      console.log("Converted events:", googleEvents.length);
+      // Convert the *new* Google events to our app's format
+      const convertedNewEvents = convertGoogleEvents(newFetchedEvents);
 
-      // Replace the faulty merge logic with a direct replacement
-      const localEvents = events.filter((event) => event.source === "local");
-      setEvents([...localEvents, ...googleEvents]);
-      setLastSyncTime(new Date())
-      setSyncStatus("synced")
-      // Add the loaded range to loadedRanges (merge with existing)
-      setLoadedRanges(prev => mergeRanges([...prev, { start: startDate, end: endDate }]))
+      // *** THIS IS THE KEY CHANGE ***
+      // Merge new events with existing events, removing duplicates
+      setEvents((prevEvents) => {
+        const existingGoogleEventIds = new Set(
+          prevEvents.filter((e) => e.source === 'google').map((e) => e.id)
+        );
+        const uniqueNewEvents = convertedNewEvents.filter(
+          (newEvent) => !existingGoogleEventIds.has(newEvent.id)
+        );
+        
+        // If it's a force sync, we replace, otherwise we append.
+        if (forceSync) {
+            const localEvents = prevEvents.filter(e => e.source === 'local');
+            return [...localEvents, ...convertedNewEvents];
+        } else {
+            return [...prevEvents, ...uniqueNewEvents];
+        }
+      });
+      
+      setGoogleCalendarEvents(prevRawEvents => {
+          if (forceSync) {
+              return newFetchedEvents;
+          }
+          const existingRawIds = new Set(prevRawEvents.map(e => e.id));
+          const uniqueNewRawEvents = newFetchedEvents.filter(e => !existingRawIds.has(e.id));
+          return [...prevRawEvents, ...uniqueNewRawEvents];
+      });
+
+      setLastSyncTime(new Date());
+      setSyncStatus("synced");
+      
+      // Add the newly loaded range to our state
+      setLoadedRanges(prev => mergeRanges([...prev, { start: startDate, end: endDate }]));
+
       console.log("=== fetchGoogleCalendarEvents completed successfully ===");
     } catch (error) {
-      console.error("Error fetching Google Calendar events:", error)
-      setSyncError("Failed to fetch your Google Calendar events. Please try again.")
-      setSyncStatus("error")
+      console.error("Error fetching Google Calendar events:", error);
+      setSyncError("Failed to fetch your Google Calendar events. Please try again.");
+      setSyncStatus("error");
     } finally {
-      setIsLoadingEvents(false)
+      setIsLoadingEvents(false);
     }
-  }
+  };
 
   // Replace the existing convertGoogleEvents function with this enhanced version
   const convertGoogleEvents = (googleEvents: GoogleCalendarEvent[]) => {
@@ -1048,12 +1147,9 @@ export default function Home() {
     }
   };
 
-  // Create a new Google Calendar event with recurrence support
+// ⬇️ REPLACE THE OLD CODE WITH THIS
   const createGoogleCalendarEvent = async (eventData, calendarId = "primary") => {
     console.log("=== CREATE GOOGLE CALENDAR EVENT START ===");
-    console.log("Event data received:", eventData);
-    console.log("Calendar ID:", calendarId);
-    
     if (!user?.accessToken) {
       console.error("No access token available");
       setSyncError("No access token available. Please sign in again.")
@@ -1061,40 +1157,19 @@ export default function Home() {
     }
 
     try {
-      // Create a clean payload with only the fields that are allowed to be modified
-      // This prevents 400 errors from sending read-only fields like id, etag, htmlLink, etc.
-const cleanPayload: {
-  summary: string;
-  description: string;
-  location: string;
-  start: { date: string } | { dateTime: string; timeZone: string };
-  end: { date: string } | { dateTime: string; timeZone: string };
-  colorId: string;
-  recurrence?: string[];
-} = {
-  summary: eventData.title,
-  description: eventData.description || "",
-  location: eventData.location || "",
-  start: eventData.isAllDay
-    ? {
-        date: formatDateForGoogleAPI(eventData, true),
-      }
-    : {
-        dateTime: formatDateForGoogleAPI(eventData, true),
-              timeZone: selectedTimeZone,
-      },
-  end: eventData.isAllDay
-    ? {
-        date: formatDateForGoogleAPI(eventData, false),
-      }
-    : {
-        dateTime: formatDateForGoogleAPI(eventData, false),
-              timeZone: selectedTimeZone,
-      },
-  colorId: eventColors.find((color) => color.value === eventData.color)?.googleId || "1",
-      }
+      const cleanPayload: any = {
+        summary: eventData.title,
+        description: eventData.description || "",
+        location: eventData.location || "",
+        start: eventData.isAllDay
+          ? { date: formatDateForGoogleAPI(eventData, true) }
+          : { dateTime: formatDateForGoogleAPI(eventData, true), timeZone: selectedTimeZone },
+        end: eventData.isAllDay
+          ? { date: formatDateForGoogleAPI(eventData, false) }
+          : { dateTime: formatDateForGoogleAPI(eventData, false), timeZone: selectedTimeZone },
+        colorId: eventColors.find((color) => color.value === eventData.color)?.googleId || "1",
+      };
 
-      // Add recurrence if specified (this should be an array of RRULE strings)
       if (eventData.isRecurring && eventData.recurrence) {
         const recurrenceRules = convertRecurrenceToGoogle(eventData.recurrence);
         if (recurrenceRules && recurrenceRules.length > 0) {
@@ -1103,9 +1178,6 @@ const cleanPayload: {
       }
 
       const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
-      console.log("[API PAYLOAD] Sending to Google:", JSON.stringify(cleanPayload, null, 2));
-      console.log("[API URL]", url);
-
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -1113,46 +1185,49 @@ const cleanPayload: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(cleanPayload),
-      })
-
-      console.log("[API RESPONSE] Status:", response.status, response.statusText);
-      console.log("[API RESPONSE] Headers:", Object.fromEntries(response.headers.entries()));
+      });
 
       if (!response.ok) {
         const errorDetails = await response.text();
         console.error('[API ERROR DETAILS]', errorDetails);
-        throw new Error(`Failed to create event: ${response.status} ${response.statusText} - ${errorDetails}`)
+        throw new Error(`Failed to create event: ${response.status} ${response.statusText} - ${errorDetails}`);
       }
 
-      const createdEvent = await response.json()
+      const createdEvent = await response.json();
       console.log("[API SUCCESS] Created event:", createdEvent);
 
-      // Refresh calendar events to show the new event
-      await fetchGoogleCalendarEvents(user.accessToken, undefined, true)
-
+      // *** THIS IS THE KEY CHANGE ***
+      // Instead of refetching, convert the new event and add it to our state
+      const newAppEvent = convertGoogleEvents([{ 
+          ...createdEvent,
+          calendarId: calendarId,
+          calendarColor: googleCalendars.find(c => c.id === calendarId)?.backgroundColor
+      }])[0];
+      
+      if (newAppEvent) {
+        setEvents(prevEvents => [...prevEvents, newAppEvent]);
+      }
+      
+      setHasUnsyncedChanges(false); // Mark as synced
       console.log("=== CREATE GOOGLE CALENDAR EVENT COMPLETED ===");
-      return createdEvent
+      return createdEvent;
+
     } catch (error) {
       console.error("=== CREATE GOOGLE CALENDAR EVENT ERROR ===");
       console.error("Error creating Google Calendar event:", error)
       setSyncError("Failed to create event in Google Calendar. Please try again.")
       return null
     }
-  }
+  };
 
-  // Update an existing Google Calendar event with recurring event support
-  const updateGoogleCalendarEvent = async (
+  // ⬇️ REPLACE THE OLD CODE WITH THIS
+const updateGoogleCalendarEvent = async (
     eventData: any,
     googleEventId: string,
     calendarId: string,
     updateScope = "this"
   ) => {
     console.log("=== UPDATE GOOGLE CALENDAR EVENT START ===");
-    console.log("Event data received:", eventData);
-    console.log("Google Event ID:", googleEventId);
-    console.log("Calendar ID:", calendarId);
-    console.log("Update scope:", updateScope);
-    
     if (!user?.accessToken) {
       console.error("No access token available");
       setSyncError("No access token available. Please sign in again.")
@@ -1160,40 +1235,19 @@ const cleanPayload: {
     }
 
     try {
-      // Create a clean payload with only the fields that are allowed to be modified
-      // This prevents 400 errors from sending read-only fields like id, etag, htmlLink, etc.
-      const cleanPayload: {
-        summary: string;
-        description: string;
-        location: string;
-        start: { date: string } | { dateTime: string; timeZone: string };
-        end: { date: string } | { dateTime: string; timeZone: string };
-        colorId: string;
-        recurrence?: string[];
-      } = {
+      const cleanPayload: any = {
         summary: eventData.title,
         description: eventData.description || "",
         location: eventData.location || "",
         start: eventData.isAllDay
-          ? {
-              date: formatDateForGoogleAPI(eventData, true),
-            }
-          : {
-              dateTime: formatDateForGoogleAPI(eventData, true),
-              timeZone: selectedTimeZone,
-            },
+          ? { date: formatDateForGoogleAPI(eventData, true) }
+          : { dateTime: formatDateForGoogleAPI(eventData, true), timeZone: selectedTimeZone },
         end: eventData.isAllDay
-          ? {
-              date: formatDateForGoogleAPI(eventData, false),
-            }
-          : {
-              dateTime: formatDateForGoogleAPI(eventData, false),
-              timeZone: selectedTimeZone,
-            },
+          ? { date: formatDateForGoogleAPI(eventData, false) }
+          : { dateTime: formatDateForGoogleAPI(eventData, false), timeZone: selectedTimeZone },
         colorId: eventColors.find((color) => color.value === eventData.color)?.googleId || "1",
-      }
+      };
 
-      // Add recurrence if specified (this should be an array of RRULE strings)
       if (eventData.isRecurring && eventData.recurrence) {
         const recurrenceRules = convertRecurrenceToGoogle(eventData.recurrence);
         if (recurrenceRules && recurrenceRules.length > 0) {
@@ -1201,13 +1255,9 @@ const cleanPayload: {
         }
       }
 
-      // Add sendUpdates parameter based on update scope
-      const sendUpdates = updateScope === "all" ? "all" : "none"
-      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${googleEventId}?sendUpdates=${sendUpdates}`
-
-      console.log("[API PAYLOAD] Clean payload being sent to Google:", JSON.stringify(cleanPayload, null, 2));
-      console.log("[API URL]", url);
-
+      const sendUpdates = updateScope === "all" ? "all" : "none";
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${googleEventId}?sendUpdates=${sendUpdates}`;
+      
       const response = await fetch(url, {
         method: "PUT",
         headers: {
@@ -1215,38 +1265,53 @@ const cleanPayload: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(cleanPayload),
-      })
+      });
 
-      console.log("[API RESPONSE] Status:", response.status, response.statusText);
-      console.log("[API RESPONSE] Headers:", Object.fromEntries(response.headers.entries()));
-
-    if (!response.ok) {
+      if (!response.ok) {
         const errorDetails = await response.text();
-      console.error('[API ERROR DETAILS]', errorDetails);
-        throw new Error(`Failed to update event: ${response.status} ${response.statusText} - ${errorDetails}`)
-    }
+        console.error('[API ERROR DETAILS]', errorDetails);
+        throw new Error(`Failed to update event: ${response.status} ${response.statusText} - ${errorDetails}`);
+      }
 
-      const updatedEvent = await response.json()
+      const updatedEvent = await response.json();
       console.log("[API SUCCESS] Updated event:", updatedEvent);
 
-      // Refresh calendar events to show the updated event
-      await fetchGoogleCalendarEvents(user.accessToken, undefined, true)
+      // *** THIS IS THE KEY CHANGE ***
+      // Instead of refetching, convert the updated event and replace it in our state
+      const updatedAppEvent = convertGoogleEvents([{ 
+        ...updatedEvent,
+        calendarId: calendarId,
+        calendarColor: googleCalendars.find(c => c.id === calendarId)?.backgroundColor
+      }])[0];
+      
+      if (updatedAppEvent) {
+          setEvents(prevEvents => prevEvents.map(event => 
+              event.id === updatedAppEvent.id ? updatedAppEvent : event
+          ));
+      }
+      
+      // If the user modified a recurring series, we need a full refresh for that series
+      if (updateScope === 'all' || updateScope === 'future') {
+          await fetchGoogleCalendarEvents(user.accessToken, undefined, undefined, undefined, true);
+      }
 
+      setHasUnsyncedChanges(false);
       console.log("=== UPDATE GOOGLE CALENDAR EVENT COMPLETED ===");
-      return updatedEvent
+      return updatedEvent;
+
     } catch (error) {
       console.error("=== UPDATE GOOGLE CALENDAR EVENT ERROR ===");
-      console.error("Error updating Google Calendar event:", error)
-      setSyncError("Failed to update event in Google Calendar. Please try again.")
-      return null
+      console.error("Error updating Google Calendar event:", error);
+      setSyncError("Failed to update event in Google Calendar. Please try again.");
+      return null;
     }
-  }
+  };
 
-  // Delete a Google Calendar event
-  const deleteGoogleCalendarEvent = async (googleEventId: string, calendarId: string) => {
+// ⬇️ REPLACE THE OLD CODE WITH THIS
+const deleteGoogleCalendarEvent = async (googleEventId: string, calendarId: string) => {
     if (!user?.accessToken) {
-      setSyncError("No access token available. Please sign in again.")
-      return false
+      setSyncError("No access token available. Please sign in again.");
+      return false;
     }
 
     try {
@@ -1254,26 +1319,71 @@ const cleanPayload: {
         `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${googleEventId}`,
         {
           method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${user.accessToken}`,
-          },
+          headers: { Authorization: `Bearer ${user.accessToken}` },
         },
-      )
+      );
 
       if (!response.ok) {
-        throw new Error(`Failed to delete event: ${response.status} ${response.statusText}`)
+        throw new Error(`Failed to delete event: ${response.status} ${response.statusText}`);
       }
+      
+      // *** THIS IS THE KEY CHANGE ***
+      // Instead of refetching, just remove the event from our state by its ID
+      setEvents(prevEvents => prevEvents.filter(event => event.id !== googleEventId));
+      
+      setHasUnsyncedChanges(false);
+      return true;
 
-      // Refresh calendar events to remove the deleted event
-      await fetchGoogleCalendarEvents(user.accessToken, undefined, true)
-
-      return true
     } catch (error) {
-      console.error("Error deleting Google Calendar event:", error)
-      setSyncError("Failed to delete event from Google Calendar. Please try again.")
-      return false
+      console.error("Error deleting Google Calendar event:", error);
+      setSyncError("Failed to delete event from Google Calendar. Please try again.");
+      return false;
     }
-  }
+  };
+
+  // ⬇️ ADD THIS ENTIRE NEW FUNCTION TO YOUR FILE
+const handleRefreshCalendar = async () => {
+    if (!user?.accessToken) {
+      setAuthError("You must be signed in to refresh the calendar.");
+      return;
+    }
+    
+    console.log("Force refreshing calendar data...");
+    
+    // 1. Clear out all existing Google events and loaded date ranges
+    setEvents(prev => prev.filter(e => e.source !== 'google'));
+    setGoogleCalendarEvents([]);
+    setLoadedRanges([]);
+    
+    // 2. Set status to syncing to show loading indicators
+    setSyncStatus("syncing");
+    
+    // 3. Fetch fresh data for the currently visible date range
+    let viewStartDate: Date, viewEndDate: Date;
+    if (settings.currentView === "day") {
+        viewStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+        viewEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 23, 59, 59, 999);
+    } else if (settings.currentView === "week") {
+        const dayOfWeek = currentDate.getDay();
+        viewStartDate = new Date(currentDate);
+        viewStartDate.setDate(currentDate.getDate() - dayOfWeek);
+        viewStartDate.setHours(0, 0, 0, 0);
+        viewEndDate = new Date(viewStartDate);
+        viewEndDate.setDate(viewStartDate.getDate() + 6);
+        viewEndDate.setHours(23, 59, 59, 999);
+    } else { // month view
+        viewStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        viewEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    }
+
+    await fetchGoogleCalendarEvents(
+      user.accessToken,
+      googleCalendars.filter(c => c.visible),
+      viewStartDate.toISOString(),
+      viewEndDate.toISOString(),
+      true // Pass `true` to indicate a forced refresh
+    );
+  };
 
   // Handle recurring event confirmation
   const handleRecurringEventConfirm = async () => {
@@ -1391,31 +1501,34 @@ const cleanPayload: {
 
       // Reset form and close modal
       const currentDateInfo = getCurrentDateInfo()
-      setNewEvent({
-        title: "",
-        startTime: "09:00",
-        endTime: "10:00",
-        description: "",
-        location: "",
-        color: "bg-blue-600",
-        exactColor: null,
-        day: currentDateInfo.day,
-        month: currentDateInfo.month,
-        year: currentDateInfo.year,
-        isAllDay: false,
-        isMultiDay: false,
-        endDay: currentDateInfo.day,
-        endMonth: currentDateInfo.month,
-        endYear: currentDateInfo.year,
-        isRecurring: false,
-        recurrence: {
-          frequency: "weekly",
-          interval: 1,
-          daysOfWeek: [new Date().getDay()],
-          endType: "never",
-          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-          count: 10,
-        },
+      dispatchNewEvent({ 
+        type: 'RESET_FORM', 
+        payload: {
+          title: "",
+          startTime: "09:00",
+          endTime: "10:00",
+          description: "",
+          location: "",
+          color: "bg-blue-600",
+          exactColor: null,
+          day: currentDateInfo.day,
+          month: currentDateInfo.month,
+          year: currentDateInfo.year,
+          isAllDay: false,
+          isMultiDay: false,
+          endDay: currentDateInfo.day,
+          endMonth: currentDateInfo.month,
+          endYear: currentDateInfo.year,
+          isRecurring: false,
+          recurrence: {
+            frequency: "weekly",
+            interval: 1,
+            daysOfWeek: [new Date().getDay()],
+            endType: "never",
+            endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            count: 10,
+          },
+        }
       })
       setShowCreateModal(false)
       setIsEditMode(false)
@@ -1622,31 +1735,34 @@ const cleanPayload: {
 
       // Reset form and close modal
       const currentDateInfo = getCurrentDateInfo()
-      setNewEvent({
-        title: "",
-        startTime: "09:00",
-        endTime: "10:00",
-        description: "",
-        location: "",
-        color: "bg-blue-600",
-        exactColor: null,
-        day: currentDateInfo.day,
-        month: currentDateInfo.month,
-        year: currentDateInfo.year,
-        isAllDay: false,
-        isMultiDay: false,
-        endDay: currentDateInfo.day,
-        endMonth: currentDateInfo.month,
-        endYear: currentDateInfo.year,
-        isRecurring: false,
-        recurrence: {
-          frequency: "weekly",
-          interval: 1,
-          daysOfWeek: [new Date().getDay()],
-          endType: "never",
-          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-          count: 10,
-        },
+      dispatchNewEvent({ 
+        type: 'RESET_FORM', 
+        payload: {
+          title: "",
+          startTime: "09:00",
+          endTime: "10:00",
+          description: "",
+          location: "",
+          color: "bg-blue-600",
+          exactColor: null,
+          day: currentDateInfo.day,
+          month: currentDateInfo.month,
+          year: currentDateInfo.year,
+          isAllDay: false,
+          isMultiDay: false,
+          endDay: currentDateInfo.day,
+          endMonth: currentDateInfo.month,
+          endYear: currentDateInfo.year,
+          isRecurring: false,
+          recurrence: {
+            frequency: "weekly",
+            interval: 1,
+            daysOfWeek: [new Date().getDay()],
+            endType: "never",
+            endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            count: 10,
+          },
+        }
       })
       setShowCreateModal(false)
       setIsEditMode(false)
@@ -1669,53 +1785,32 @@ const cleanPayload: {
   }
 
   const handleDateSelect = (day: number, month: number, year: number) => {
-    setNewEvent({ ...newEvent, day, month, year, exactColor: newEvent.exactColor ?? null })
+    dispatchNewEvent({ type: 'SET_DAY', payload: { day, month, year } })
     setShowDatePicker(false)
   }
 
   const handleEndDateSelect = (day: number, month: number, year: number) => {
-    setNewEvent({ ...newEvent, endDay: day, endMonth: month, endYear: year, exactColor: newEvent.exactColor ?? null })
+    dispatchNewEvent({ type: 'SET_END_DAY', payload: { day, month, year } })
     setShowEndDatePicker(false)
   }
 
   const handleRecurrenceEndDateSelect = (day: number, month: number, year: number) => {
-    setNewEvent({
-      ...newEvent,
-      recurrence: {
-        ...newEvent.recurrence,
-        endDate: new Date(year, month, day),
-      },
-      exactColor: newEvent.exactColor ?? null,
-    })
+    dispatchNewEvent({ type: 'SET_RECURRENCE_END_DATE', payload: new Date(year, month, day) })
     setShowRecurrenceEndDatePicker(false)
   }
 
   const handleAllDayToggle = () => {
     const newAllDayState = !newEvent.isAllDay
-    setNewEvent({
-      ...newEvent,
-      isAllDay: newAllDayState,
-      startTime: newAllDayState ? "00:00" : "09:00",
-      endTime: newAllDayState ? "23:59" : "10:00",
-    })
+    dispatchNewEvent({ type: 'SET_ALL_DAY', payload: newAllDayState })
   }
 
   const handleMultiDayToggle = () => {
     const newMultiDayState = !newEvent.isMultiDay
-    setNewEvent({
-      ...newEvent,
-      isMultiDay: newMultiDayState,
-      endDay: newMultiDayState ? newEvent.day : newEvent.day,
-      endMonth: newMultiDayState ? newEvent.month : newEvent.month,
-      endYear: newMultiDayState ? newEvent.year : newEvent.year,
-    })
+    dispatchNewEvent({ type: 'SET_MULTI_DAY', payload: newMultiDayState })
   }
 
   const handleRecurringToggle = () => {
-    setNewEvent({
-      ...newEvent,
-      isRecurring: !newEvent.isRecurring,
-    })
+    dispatchNewEvent({ type: 'SET_RECURRING', payload: !newEvent.isRecurring })
   }
 
   // Get current week dates based on current date
@@ -1813,28 +1908,6 @@ const cleanPayload: {
     i < firstDayOffset ? null : i - firstDayOffset + 1,
   )
 
-  // Filter events for current display
-  const getEventsForDisplay = () => {
-    if (settings.currentView === "day") {
-      return events.filter(
-        (event) =>
-          event.day === getCurrentDateInfo().day &&
-          event.month === getCurrentDateInfo().month &&
-          event.year === getCurrentDateInfo().year,
-      )
-    } else if (settings.currentView === "week") {
-      return events.filter((event) =>
-        weekDates.some(
-          (weekDate) => event.day === weekDate.date && event.month === weekDate.month && event.year === weekDate.year,
-        ),
-      )
-    } else {
-      return events.filter(
-        (event) => event.month === getCurrentDateInfo().month && event.year === getCurrentDateInfo().year,
-      )
-    }
-  }
-
   const isCurrentDay = (day: number) => {
     const today = new Date()
     return (
@@ -1927,31 +2000,34 @@ const cleanPayload: {
     }
 
     // Pre-fill the new event with dragged time and date
-    setNewEvent({
-      title: "",
-      startTime,
-      endTime,
-      description: "",
-      location: "",
-      color: "bg-blue-600",
-      exactColor: null,
-      day: eventDate.day,
-      month: eventDate.month,
-      year: eventDate.year,
-      isAllDay: false,
-      isMultiDay: false,
-      endDay: eventDate.day,
-      endMonth: eventDate.month,
-      endYear: eventDate.year,
-      isRecurring: false,
-      recurrence: {
-        frequency: "weekly",
-        interval: 1,
-        daysOfWeek: [new Date().getDay()],
-        endType: "never",
-        endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        count: 10,
-      },
+    dispatchNewEvent({
+      type: 'RESET_FORM',
+      payload: {
+        title: "",
+        startTime,
+        endTime,
+        description: "",
+        location: "",
+        color: "bg-blue-600",
+        exactColor: null,
+        day: eventDate.day,
+        month: eventDate.month,
+        year: eventDate.year,
+        isAllDay: false,
+        isMultiDay: false,
+        endDay: eventDate.day,
+        endMonth: eventDate.month,
+        endYear: eventDate.year,
+        isRecurring: false,
+        recurrence: {
+          frequency: "weekly",
+          interval: 1,
+          daysOfWeek: [new Date().getDay()],
+          endType: "never",
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          count: 10,
+        },
+      }
     })
 
     openCreateEventModal();
@@ -2059,7 +2135,12 @@ const cleanPayload: {
   }
 
   const renderDayView = () => {
-    const dayEvents = getEventsForDisplay()
+    const dayEvents = events.filter(
+      (event) =>
+        event.day === getCurrentDateInfo().day &&
+        event.month === getCurrentDateInfo().month &&
+        event.year === getCurrentDateInfo().year,
+    );
     const allDayEvents = dayEvents.filter((event) => event.isAllDay)
     const timedEvents = dayEvents.filter((event) => !event.isAllDay)
     const slotHeight = getSlotHeight()
@@ -2263,7 +2344,16 @@ const cleanPayload: {
 
   const renderWeekView = () => {
     const slotHeight = getSlotHeight()
-    const weekEvents = getEventsForDisplay()
+    // ⬇️ REPLACE THE OLD LINE WITH THIS
+    const startOfWeek = new Date(weekDates[0].year, weekDates[0].month, weekDates[0].date);
+    startOfWeek.setHours(0, 0, 0, 0); // Start of the first day
+    const endOfWeek = new Date(weekDates[6].year, weekDates[6].month, weekDates[6].date);
+    endOfWeek.setHours(23, 59, 59, 999); // End of the last day
+
+    const weekEvents = events.filter(event => {
+      const eventDate = new Date(event.year, event.month, event.day);
+      return eventDate >= startOfWeek && eventDate <= endOfWeek;
+    });
 
     return (
       <div 
@@ -2565,7 +2655,12 @@ const cleanPayload: {
   }
 
   const renderMonthView = () => {
-    const monthEvents = getEventsForDisplay()
+    // ⬇️ REPLACE THE OLD LINE WITH THIS
+    const monthEvents = events.filter(
+      (event) =>
+        event.month === getCurrentDateInfo().month &&
+        event.year === getCurrentDateInfo().year,
+    );
 
     return (
       <div 
@@ -2712,31 +2807,34 @@ const cleanPayload: {
 
     // Reset the new event form to current date/time values
     const currentDateTime = getCurrentDateTime()
-    setNewEvent({
-      title: "",
-      startTime: currentDateTime.startTime,
-      endTime: currentDateTime.endTime,
-      description: "",
-      location: "",
-      color: "bg-blue-600",
-      exactColor: null,
-      day: currentDateTime.day,
-      month: currentDateTime.month,
-      year: currentDateTime.year,
-      isAllDay: false,
-      isMultiDay: false,
-      endDay: currentDateTime.day,
-      endMonth: currentDateTime.month,
-      endYear: currentDateTime.year,
-      isRecurring: false,
-      recurrence: {
-        frequency: "weekly",
-        interval: 1,
-        daysOfWeek: [new Date().getDay()],
-        endType: "never",
-        endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        count: 10,
-      },
+    dispatchNewEvent({
+      type: 'RESET_FORM',
+      payload: {
+        title: "",
+        startTime: currentDateTime.startTime,
+        endTime: currentDateTime.endTime,
+        description: "",
+        location: "",
+        color: "bg-blue-600",
+        exactColor: null,
+        day: currentDateTime.day,
+        month: currentDateTime.month,
+        year: currentDateTime.year,
+        isAllDay: false,
+        isMultiDay: false,
+        endDay: currentDateTime.day,
+        endMonth: currentDateTime.month,
+        endYear: currentDateTime.year,
+        isRecurring: false,
+        recurrence: {
+          frequency: "weekly",
+          interval: 1,
+          daysOfWeek: [new Date().getDay()],
+          endType: "never",
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          count: 10,
+        },
+      }
     })
   }
 
@@ -2803,31 +2901,34 @@ const cleanPayload: {
 
   const handleCreateEvent = () => {
     const currentDateTime = getCurrentDateTime()
-    setNewEvent({
-      title: "",
-      startTime: currentDateTime.startTime,
-      endTime: currentDateTime.endTime,
-      description: "",
-      location: "",
-      color: "bg-blue-600",
-      exactColor: null,
-      day: currentDateTime.day,
-      month: currentDateTime.month,
-      year: currentDateTime.year,
-      isAllDay: false,
-      isMultiDay: false,
-      endDay: currentDateTime.day,
-      endMonth: currentDateTime.month,
-      endYear: currentDateTime.year,
-      isRecurring: false,
-      recurrence: {
-        frequency: "weekly",
-        interval: 1,
-        daysOfWeek: [new Date().getDay()],
-        endType: "never",
-        endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        count: 10,
-      },
+    dispatchNewEvent({
+      type: 'RESET_FORM',
+      payload: {
+        title: "",
+        startTime: currentDateTime.startTime,
+        endTime: currentDateTime.endTime,
+        description: "",
+        location: "",
+        color: "bg-blue-600",
+        exactColor: null,
+        day: currentDateTime.day,
+        month: currentDateTime.month,
+        year: currentDateTime.year,
+        isAllDay: false,
+        isMultiDay: false,
+        endDay: currentDateTime.day,
+        endMonth: currentDateTime.month,
+        endYear: currentDateTime.year,
+        isRecurring: false,
+        recurrence: {
+          frequency: "weekly",
+          interval: 1,
+          daysOfWeek: [new Date().getDay()],
+          endType: "never",
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          count: 10,
+        },
+      }
     })
     setShowCreateModal(true)
   }
@@ -2899,7 +3000,7 @@ const cleanPayload: {
     if (file) {
       const reader = new FileReader()
       reader.onloadend = () => {
-        setNewEvent({ ...newEvent, customBackgroundUrl: reader.result })
+        dispatchNewEvent({ type: 'SET_CUSTOM_BACKGROUND_URL', payload: reader.result as string })
         setBackgroundImage("custom")
       }
       reader.readAsDataURL(file)
@@ -2907,7 +3008,7 @@ const cleanPayload: {
   }
 
   const handleLocationChange = (value: string) => {
-    setNewEvent({ ...newEvent, location: value })
+    dispatchNewEvent({ type: 'SET_LOCATION', payload: value })
 
     // Basic location suggestion - replace with API call for real data
     if (value.length > 2) {
@@ -2921,7 +3022,7 @@ const cleanPayload: {
   }
 
   const handleLocationSelect = (location: string) => {
-    setNewEvent({ ...newEvent, location })
+    dispatchNewEvent({ type: 'SET_LOCATION', payload: location })
     setLocationSuggestions([])
     setShowLocationSuggestions(false)
   }
@@ -2932,8 +3033,8 @@ const cleanPayload: {
 
   const handleEditEvent = () => {
     setIsEditMode(true)
-    setEditingEventId(selectedEvent?.id) // Make sure this is the correct ID
-    setNewEvent({
+    setEditingEventId(selectedEvent?.id)
+    dispatchNewEvent({ type: 'SET_FROM_EVENT', payload: {
       title: selectedEvent?.title || "",
       startTime: selectedEvent?.startTime || "",
       endTime: selectedEvent?.endTime || "",
@@ -2958,9 +3059,7 @@ const cleanPayload: {
         endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         count: 10,
       },
-    })
-
-    // Close the event details modal when opening edit form
+    } })
     setSelectedEvent(null)
     setShowCreateModal(true)
   }
@@ -3031,12 +3130,6 @@ const cleanPayload: {
   // }, [googleScriptLoaded, user])
   //
   // Now, initializeGoogleAuth is only called once after the script loads, preventing infinite re-renders.
-
-  const handleRefreshCalendar = async () => {
-    if (user?.accessToken) {
-      await fetchGoogleCalendars(user.accessToken, true)
-    }
-  }
 
   // At the top of the component
   const startTimeDropdownRef = useRef<HTMLDivElement>(null);
@@ -3598,6 +3691,30 @@ const cleanPayload: {
                           <div className="flex gap-1">
                             <button
                               onClick={() => {
+                                const newMonth = newEvent.month - 1
+                                const newYear = newEvent.year
+                                dispatchNewEvent({
+                                  type: 'SET_DAY',
+                                  payload: {
+                                    day: newEvent.day,
+                                    month: newMonth < 0 ? 11 : newMonth,
+                                    year: newMonth < 0 ? newYear - 1 : newYear,
+                                  }
+                                })
+                              }}
+                              className="p-1 rounded-full hover:bg-white/20"
+                            >
+                              <ChevronLeft className="h-4 w-4 text-white" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const newMonth = newEvent.month + 1
+                                const newYear = newEvent.year
+                                dispatchNewEvent({
+                                  type: 'SET_DAY',
+                                  payload: {
+                                    day: newEvent.day,
+                                    month: newMonth > 11 ? 0 : newMonth,
                                 const newDate = new Date(currentDate)
                                 newDate.setMonth(newDate.getMonth() - 1)
                                 setCurrentDate(newDate)
@@ -3812,7 +3929,7 @@ const cleanPayload: {
               <button
                         key={view}
                         onClick={() => {
-                          setNewEvent({ ...newEvent, source: view.toLowerCase() });
+                          dispatchNewEvent({ type: 'SET_SOURCE', payload: view.toLowerCase() });
                           setShowViewDropdown(false);
                         }}
                         className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
@@ -4041,7 +4158,7 @@ const cleanPayload: {
                       type="text"
                       value={newEvent.title}
                       onChange={e => {
-                        setNewEvent({ ...newEvent, title: e.target.value });
+                        dispatchNewEvent({ type: 'SET_TITLE', payload: e.target.value });
                         if (triedSubmit && titleError) setTitleError("");
                       }}
                       className={`w-full px-3 py-2 rounded-md text-white bg-white/10 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${titleError && triedSubmit ? 'border-red-500' : 'border-white/20'}`}
@@ -4164,10 +4281,13 @@ const cleanPayload: {
                                   onClick={() => {
                                     const newMonth = newEvent.month - 1
                                     const newYear = newEvent.year
-                                    setNewEvent({
-                                      ...newEvent,
-                                      month: newMonth < 0 ? 11 : newMonth,
-                                      year: newMonth < 0 ? newYear - 1 : newYear,
+                                    dispatchNewEvent({
+                                      type: 'SET_DAY',
+                                      payload: {
+                                        day: newEvent.day,
+                                        month: newMonth < 0 ? 11 : newMonth,
+                                        year: newMonth < 0 ? newYear - 1 : newYear,
+                                      }
                                     })
                                   }}
                                   className="p-1 rounded-full hover:bg-white/20"
@@ -4178,10 +4298,13 @@ const cleanPayload: {
                                   onClick={() => {
                                     const newMonth = newEvent.month + 1
                                     const newYear = newEvent.year
-                                    setNewEvent({
-                                      ...newEvent,
-                                      month: newMonth > 11 ? 0 : newMonth,
-                                      year: newMonth > 11 ? newYear + 1 : newYear,
+                                    dispatchNewEvent({
+                                      type: 'SET_DAY',
+                                      payload: {
+                                        day: newEvent.day,
+                                        month: newMonth > 11 ? 0 : newMonth,
+                                        year: newMonth > 11 ? newYear + 1 : newYear,
+                                      }
                                     })
                                   }}
                                   className="p-1 rounded-full hover:bg-white/20"

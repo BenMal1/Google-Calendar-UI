@@ -1,44 +1,37 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from 'react';
 
-// Types (copy from page.tsx)
-export interface GoogleUser {
-  id: string;
-  name: string;
-  email: string;
-  picture: string;
-  given_name: string;
-  family_name: string;
-  accessToken?: string;
+// NOTE: These types should be defined in a shared file, but for simplicity, they are duplicated here.
+interface GoogleUser { 
+  id: string; 
+  accessToken?: string; 
+  name?: string;
+  email?: string;
+  picture?: string;
+  given_name?: string;
+  family_name?: string;
 }
 
-export interface GoogleCalendar {
-  id: string;
-  summary: string;
-  description?: string;
-  backgroundColor?: string;
-  foregroundColor?: string;
-  primary?: boolean;
-  accessRole: string;
+interface GoogleCalendar { 
+  id: string; 
+  summary: string; 
+  backgroundColor?: string; 
+  primary?: boolean; 
   selected?: boolean;
-  visible: boolean;
+  visible?: boolean;
+  description?: string;
+  foregroundColor?: string;
+  accessRole?: string;
   colorId?: string;
 }
 
-export interface GoogleCalendarEvent {
-  id: string;
-  summary: string;
+interface GoogleCalendarEvent { 
+  id: string; 
+  summary: string; 
+  start: { dateTime?: string; date?: string; timeZone?: string }; 
+  end: { dateTime?: string; date?: string; timeZone?: string }; 
+  calendarId: string;
   description?: string;
   location?: string;
-  start: {
-    dateTime?: string;
-    date?: string;
-    timeZone?: string;
-  };
-  end: {
-    dateTime?: string;
-    date?: string;
-    timeZone?: string;
-  };
   colorId?: string;
   attendees?: Array<{
     email: string;
@@ -49,7 +42,6 @@ export interface GoogleCalendarEvent {
     email: string;
     displayName?: string;
   };
-  calendarId: string;
   calendarColor?: string;
   recurringEventId?: string;
   recurrence?: string[];
@@ -76,7 +68,16 @@ export function useSmartCalendarData(user: GoogleUser | null) {
       const calData = await calResponse.json();
       
       const fetchedCalendars: GoogleCalendar[] = calData.items.map((cal: any) => ({
-        id: cal.id, summary: cal.summary, backgroundColor: cal.backgroundColor, primary: cal.primary, selected: cal.selected
+        id: cal.id, 
+        summary: cal.summary, 
+        backgroundColor: cal.backgroundColor, 
+        primary: cal.primary, 
+        selected: cal.selected,
+        description: cal.description,
+        foregroundColor: cal.foregroundColor,
+        accessRole: cal.accessRole,
+        colorId: cal.colorId,
+        visible: cal.primary || cal.selected || false
       }));
       setCalendars(fetchedCalendars);
 
@@ -126,8 +127,12 @@ export function useSmartCalendarData(user: GoogleUser | null) {
   }, []);
 
   const visibleEvents = useMemo(() => {
+    if(!visibility || Object.keys(visibility).length === 0) return allEvents.filter(event => {
+        const calendar = calendars.find(c => c.id === event.calendarId)
+        return calendar?.primary || calendar?.selected
+    });
     return allEvents.filter(event => visibility[event.calendarId]);
-  }, [allEvents, visibility]);
+  }, [allEvents, visibility, calendars]);
 
   return { 
     isLoading, error, calendars, visibility, toggleCalendarVisibility, visibleEvents,
